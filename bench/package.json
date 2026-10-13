@@ -19,13 +19,13 @@
     "autoprefixer": "^10.6.1",
     "gulp": "^5.0.1",
     "handlebars": "^4.7.10",
-    "postcss": "^8.5.29",
-    "rollup": "^4.64.2",
+    "postcss": "^8.5.30",
+    "rollup": "^4.64.6",
     "sass": "^1.105.1",
     "sitemap": "^9.0.1"
   },
   "devDependencies": {
-    "@types/node": "^24.19.1",
+    "@types/node": "^26.6.5",
     "typescript": "~7.0.2"
   }
 }
