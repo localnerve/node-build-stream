@@ -52,10 +52,18 @@ export declare function dest(destDir: string, opts?: {
  * Async functions are supported. Pushed values must be File-like (string `path`)
  * or through() throws a clear error.
  *
+ * When the transform function throws, the error is wrapped in a FileError
+ * naming the file being processed and the stage label, with the original
+ * error preserved as `.cause` — so a mid-stream failure points at the exact
+ * file (see docs/streams.md, "File context on errors").
+ *
  * @param {(file: import('./file.js').File) => any} fn Per-file transform function.
+ * @param {string} [stage] Optional label for this step (e.g. `'minify'`), used
+ *   in FileError messages when `fn` throws. Defaults to `'through()'`.
  * @returns {Transform} Object-mode transform.
+ * @throws {TypeError} When `stage` is provided but is not a string.
  */
-export declare function through(fn: (file: import('./file.js').File) => any): Transform;
+export declare function through(fn: (file: import('./file.js').File) => any, stage?: string): Transform;
 /**
  * Merge multiple object-mode File streams into a single stream.
  *

@@ -218,6 +218,22 @@ test('CLI exits non-zero and prints the error when a task fails', async () => {
   assert.match(stderr, /kapow/);
 });
 
+test('CLI prints a parseable one-liner for FileError (file + stage) and exits non-zero', async () => {
+  const cwd = await freshDir();
+  await fs.mkdir(path.join(cwd, 'src'));
+  await fs.writeFile(path.join(cwd, 'src', 'a.txt'), 'hi');
+  const source = [
+    `import { task, src, through, dest, pipeline } from '${INDEX}';`,
+    'task(\'build\', () => pipeline(',
+    '  src(\'src/a.txt\'),',
+    '  through(() => { throw new Error(\'boom\'); }, \'minify\'),',
+    '  dest(\'out\'),',
+    '));',
+  ].join('\n') + '\n';
+  const { stderr } = await runCliExpectFail(cwd, source, ['build']);
+  assert.match(stderr, /✗ build failed — file .*a\.txt \(stage minify\): boom/);
+});
+
 test('CLI --watch without globs on the default export fails clearly', async () => {
   const cwd = await freshDir();
   const { stderr } = await runCliExpectFail(cwd, `import '${INDEX}';\n`, ['--watch']);

@@ -13,9 +13,9 @@ Package facts: ESM-only · zero runtime dependencies (devDeps only) ·
 
 | Import | Module | Named exports | Default export |
 | --- | --- | --- | --- |
-| `node-build-stream` | `src/index.js` | all of the below (plus `pipeline`) | `nodeBuild` object |
+| `node-build-stream` | `src/index.js` | all of the below (plus `pipeline`, plus `FileError` from `src/file-error.js`) | `nodeBuild` object |
 | `node-build-stream/task` | `src/task.js` | `task`, `seriesDefault`, `getTask`, `listTasks`, `series`, `parallel`, `run`, `runDefault` | — |
-| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `merge`, `prefixDest`, `wrapFile`, `unwrapFile` | — |
+| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `merge`, `prefixDest`, `wrapFile`, `unwrapFile` (no `FileError` — main entry only) | — |
 | `node-build-stream/file` | `src/file.js` | `File` | `File` |
 | `node-build-stream/glob` | `src/glob.js` | `globFiles`, `deriveBase` | `globFiles` |
 | `node-build-stream/clean` | `src/clean.js` | `clean` | `clean` |
@@ -29,11 +29,10 @@ Note: there is **no** `node-build-stream/vinyl` subpath — `resolveFileClass` /
 
 Plain object mirroring gulp's common surface for quick migration. Keys:
 `task`, `series`, `parallel`, `run`, `runDefault`, `src`, `dest`, `through`,
-`merge`, `prefixDest`, `clean`, `watch`, `parseArgs`, `pipeline`. NOT on the
-default object
-(named imports only): `getTask`, `listTasks`, `seriesDefault`, `wrapFile`,
-`unwrapFile`, `File`, `globFiles`, `deriveBase`, `resolveFileClass`,
-`resolveFileClassSync`.
+`merge`, `prefixDest`, `FileError`, `clean`, `watch`, `parseArgs`, `pipeline`.
+NOT on the default object (named imports only): `getTask`, `listTasks`,
+`seriesDefault`, `wrapFile`, `unwrapFile`, `File`, `globFiles`, `deriveBase`,
+`resolveFileClass`, `resolveFileClassSync`.
 
 ---
 
@@ -204,10 +203,10 @@ function prefixDest(prefix: string): Transform; // objectMode both sides; mutate
   transform.
 - **throws** `TypeError` immediately for non-string arguments.
 
-### `through(fn)`
+### `through(fn, stage?)`
 
 ```ts
-function through(fn: (file: File) => any): Transform; // objectMode both sides
+function through(fn: (file: File) => any, stage?: string): Transform; // objectMode both sides
 ```
 
 Per-file transform for native (non-gulp) build steps. `fn` may be async and may:
@@ -219,6 +218,31 @@ Per-file transform for native (non-gulp) build steps. `fn` may be async and may:
 
 **Validates output**: any non-null pushed value must be File-like (object with a
 string `.path`) or `through()` throws a clear `TypeError` naming what it got.
+
+**File context on errors**: when `fn` throws, the error is wrapped in a
+`FileError` naming the offending file (`err.file`) and the optional `stage`
+label (`err.stage`, default `'through()'`), with the original error preserved
+as `err.cause`. Message format: `<stage> failed on <file>: <original message>`.
+A non-string `stage` throws a `TypeError` immediately; a `FileError` thrown by
+`fn` passes through unchanged (no double-wrapping).
+
+### `class FileError` — file-context error (main entry only)
+
+```ts
+class FileError extends Error {
+  constructor(file: string, stage: string, cause: unknown);
+  name: 'FileError';
+  file: string;   // path of the file being processed when it threw
+  stage: string;  // label of the failing step (e.g. 'minify', 'through()')
+  cause: Error;   // the original error, intact
+}
+```
+
+Produced automatically by `through()` when its transform throws — one readable,
+parseable line (`<stage> failed on <file>: <original message>`) that points at
+the exact file and step. The CLI renders it as
+`✗ build failed — file <path> (stage <label>): <message>` plus the original
+stack. Check with `err.name === 'FileError'` or `instanceof FileError`.
 
 ### `wrapFile(filePath)` / `unwrapFile()` — raw-buffer ↔ file bridge
 

@@ -11,6 +11,7 @@
  */
 import { task, series, parallel, run, runDefault, getTask, listTasks, seriesDefault } from './task.js';
 import { src, dest, through, merge, prefixDest, wrapFile, unwrapFile } from './stream.js';
+import { FileError } from './file-error.js';
 import { File } from './file.js';
 import { resolveFileClass, resolveFileClassSync } from './vinyl.js';
 import { clean } from './clean.js';
@@ -20,6 +21,7 @@ import { watch } from './watch.js';
 export { task, series, parallel, run, runDefault, getTask, listTasks, seriesDefault };
 export { src, dest, through, merge, prefixDest, wrapFile, unwrapFile };
 export { pipeline } from 'node:stream/promises';
+export { FileError };
 export { File };
 export { globFiles, deriveBase } from './glob.js';
 export { resolveFileClass, resolveFileClassSync };
@@ -29,5 +31,5 @@ export { watch };
 
 /** Default export mirrors gulp's common surface for quick migration. */
 import { pipeline as _pipeline } from 'node:stream/promises';
-const nodeBuild = { task, series, parallel, run, runDefault, src, dest, through, merge, prefixDest, clean, watch, parseArgs, pipeline: _pipeline };
+const nodeBuild = { task, series, parallel, run, runDefault, src, dest, through, merge, prefixDest, FileError, clean, watch, parseArgs, pipeline: _pipeline };
 export default nodeBuild;

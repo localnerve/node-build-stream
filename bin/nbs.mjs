@@ -206,8 +206,27 @@ async function main() {
   console.log(`\n✓ build complete (${path.basename(buildFile)})`);
 }
 
+/**
+ * Print a build failure. A FileError (thrown by through() steps) gets a
+ * single parseable line — `✗ build failed — file <path> (stage <label>):
+ * <message>` — followed by the original error's stack, so an agent or human
+ * can jump straight to the offending file and step. Anything else prints the
+ * usual full stack.
+ *
+ * @param {unknown} err The rejection value from main().
+ */
+function printFailure(err) {
+  if (err instanceof Error && err.name === 'FileError') {
+    const fe = /** @type {any} */ (err);
+    console.error(`\n✗ build failed — file ${fe.file} (stage ${fe.stage}): ${fe.cause?.message ?? fe.message}`);
+    if (fe.cause instanceof Error && fe.cause.stack) console.error(fe.cause.stack);
+  } else {
+    console.error('\n✗ build failed:');
+    console.error(err && err.stack ? err.stack : err);
+  }
+}
+
 main().catch((err) => {
-  console.error('\n✗ build failed:');
-  console.error(err && err.stack ? err.stack : err);
+  printFailure(err);
   process.exit(1);
 });

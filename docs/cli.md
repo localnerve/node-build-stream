@@ -61,7 +61,15 @@ The CLI imports your build file so its `task(...)` registrations run, then:
    every registered task in parallel (see [Tasks](./tasks.md)).
 
 On success it prints `✓ build complete (<file>)`; on failure it prints the error
-and exits with a non-zero code — exactly what CI needs.
+and exits with a non-zero code — exactly what CI needs. A failure inside a
+`through()` step is wrapped in a `FileError`, which the CLI renders as one
+parseable line plus the original stack:
+
+```
+✗ build failed — file /proj/src/css/site.css (stage minify): Unexpected token } at 12:40
+```
+
+See [Streams → File context on errors](./streams.md#file-context-on-errors-fileerror).
 
 ## Listing tasks
 

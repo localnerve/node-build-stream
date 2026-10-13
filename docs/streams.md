@@ -198,7 +198,7 @@ Under the hood it uses one recursive `fs.watch`, so any number of globs costs a
 single native watcher. See [the CLI's Watching section](./cli.md#watching) for how
 this maps to `node-build-stream --watch` and how it differs from Node's own `--watch`.
 
-## `through(fn)` — transform files in memory
+## `through(fn, stage?)` — transform files in memory
 
 `through()` is how you write **your own** build step without any plugin and
 without subclassing anything. It returns a transform stream that calls `fn(file)`
@@ -250,6 +250,42 @@ src('src/template.txt')
   ]))
   .pipe(dest('dist'));                       // writes dist/a.txt and dist/b.txt
 ```
+
+### The `stage` label (optional second argument)
+
+The second argument is an optional string that names this step in error messages — give each transform a real name so failures point at the right stage:
+
+```js
+src('src/**/*.css')
+  .pipe(through(minify, 'minify'))
+  .pipe(through(injectHashes, 'csp-hashes'))
+  .pipe(dest('dist'));
+```
+
+When omitted, the label defaults to `'through()'`. A non-string label throws a `TypeError` immediately.
+
+### File context on errors: `FileError`
+
+When your transform function **throws**, the error is automatically wrapped in a
+**`FileError`** — an `Error` subclass that names *which file* and *which step*
+failed, so a mid-stream failure points at the exact file instead of just making
+the build red:
+
+- `err.file` — the path of the file being processed when it threw;
+- `err.stage` — your stage label (or `'through()'`);
+- `err.cause` — your original error, intact, with its own stack.
+
+The message is one parseable line: `<stage> failed on <file>: <original message>`:
+
+```
+minify failed on /proj/src/css/site.css: Unexpected token } at 12:40
+```
+
+The CLI renders it as `✗ build failed — file <path> (stage <label>): <message>`
+followed by the original stack. When driving builds in code, check
+`err.name === 'FileError'`, or use `instanceof FileError` (`FileError` is
+exported from `node-build-stream`). A `FileError` thrown by your own function
+passes through unchanged — wrapping never double-nests.
 
 ## Connecting the pieces: `pipeline()`
 

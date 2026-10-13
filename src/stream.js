@@ -13,6 +13,7 @@ import path from 'node:path';
 import { Readable, Writable, Transform } from 'node:stream';
 import { globFiles, deriveBase } from './glob.js';
 import { resolveFileClassSync } from './vinyl.js';
+import { toFileError } from './file-error.js';
 
 /**
  * Options for {@link src}.
@@ -180,10 +181,22 @@ function describeValue(value) {
  * Async functions are supported. Pushed values must be File-like (string `path`)
  * or through() throws a clear error.
  *
+ * When the transform function throws, the error is wrapped in a FileError
+ * naming the file being processed and the stage label, with the original
+ * error preserved as `.cause` — so a mid-stream failure points at the exact
+ * file (see docs/streams.md, "File context on errors").
+ *
  * @param {(file: import('./file.js').File) => any} fn Per-file transform function.
+ * @param {string} [stage] Optional label for this step (e.g. `'minify'`), used
+ *   in FileError messages when `fn` throws. Defaults to `'through()'`.
  * @returns {Transform} Object-mode transform.
+ * @throws {TypeError} When `stage` is provided but is not a string.
  */
-export function through(fn) {
+export function through(fn, stage) {
+  if (stage !== undefined && typeof stage !== 'string') {
+    throw new TypeError(`through() stage label must be a string. Got: ${describeValue(stage)}.`);
+  }
+  const stageLabel = stage ?? 'through()';
   return new Transform({
     objectMode: true,
     async transform(file, _enc, callback) {
@@ -197,7 +210,8 @@ export function through(fn) {
         }
         callback();
       } catch (cause) {
-        callback(/** @type {Error} */ (cause));
+        const filePath = file && typeof file.path === 'string' ? file.path : '(unknown file)';
+        callback(toFileError(cause, filePath, stageLabel));
       }
     },
   });
