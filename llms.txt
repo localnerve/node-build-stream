@@ -1,0 +1,35 @@
+# node-build-stream
+
+A no-dependency, Node.js 24+ streaming build runner that replaces Gulp's core while
+staying compatible with the existing ecosystem of Gulp plugins. Built entirely on
+`node:` built-ins — zero runtime dependencies. ESM-only. Optional run-time use of your
+project's own `vinyl` package for maximum plugin compatibility.
+
+## Load this one file for the whole API surface
+
+- [docs/api.md](./docs/api.md): The complete export surface in one dense, machine-readable reference: every entry point, named/default export, signature, parameter, and return type.
+
+## Guides (per feature)
+
+- [Getting started](./docs/getting-started.md): The mental model, install, and a first build (CLI + code).
+- [Tasks, series & parallel](./docs/tasks.md): `task(name, fn, description?)`, `series()`, `parallel()`, `run()`, `getTask()`, `listTasks()`, `describeTasks()`, `seriesDefault()`, `runDefault()`.
+- [Streams](./docs/streams.md): `src()`, `dest()`, `merge()`, `prefixDest()`, `clean()`, `through(fn, stage?)` (file-context errors via `FileError`), `watch()`, `pipeline()`, and the gulp `.pipe(merge())` translation note.
+- [The File object](./docs/file.md): The `File` class — `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`.
+- [Globbing](./docs/glob.md): Pattern syntax, `base` derivation rules, and the raw `globFiles()` / `deriveBase()` helpers.
+- [Gulp plugin interop](./docs/gulp-plugins.md): Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge.
+- [The CLI](./docs/cli.md): Invoking builds from the terminal (`nbs`), build-file discovery, `--watch`, `--list --json`, and receiving your own `--flags` in a task.
+
+## Facts an agent needs up front
+
+- Entry points: `node-build-stream` (main; everything incl. `pipeline` + `FileError`), plus subpaths `/task`, `/stream`, `/file`, `/glob`, `/clean`, `/args`, `/watch`. There is no `/vinyl` subpath.
+- Every API returns or composes Promises — `await series(...)`, `await pipeline(src(...), dest(...))`. Task bodies may be sync, async, or stream-returning.
+- The default export is a plain `nodeBuild` object mirroring gulp's common surface; some helpers (`getTask`, `listTasks`, `wrapFile`, `unwrapFile`, `File`, glob helpers) are named-only.
+- TypeScript declarations ship under `types/` and are generated from JSDoc — never hand-edit them.
+- `base` derivation: a wildcard-free pattern like `src/css/b.css` lands FLAT in dest; only wildcarded patterns keep subfolder structure. Override with `src(patterns, { base })`.
+- Gulp's `.pipe(merge(srcB))` idiom does not work on Node (auto `end()`); use the direct-call form: `pipeline(merge(srcA, srcB), dest('dist'))`.
+
+## Repository
+
+- [README.md](./README.md): Overview, quick start, docs map, test/bench instructions.
+- [examples/basic/build.mjs](./examples/basic/build.mjs) and [examples/webapp/](./examples/webapp/): Runnable build files (try `npm run build:example`).
+- [bench/README.md](./bench/README.md): The nbs-vs-gulp benchmark harness and its CI regression gate.

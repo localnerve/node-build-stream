@@ -67,6 +67,8 @@
     "docs",
     "examples",
     "README.md",
+    "llms.txt",
+    "AGENTS.md",
     "LICENSE.md"
   ],
   "author": "Alex Grant <alex@localnerve.com> (https://www.localnerve.com)",

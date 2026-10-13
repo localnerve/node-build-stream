@@ -79,6 +79,10 @@ for someone who has never used Gulp or this project before. Start with
 Need the whole API surface in one load? See the
 [API reference](./docs/api.md) — every entry point, export, signature, and return type.
 
+AI agents: start from [llms.txt](./llms.txt) (a compact index of this package pointing at
+`docs/api.md` as the single-load reference); contributor-agent rules live in
+[AGENTS.md](./AGENTS.md).
+
 | Guide | What it covers |
 | ----- | -------------- |
 | [API reference](./docs/api.md) | The complete export surface in one dense file: entry points, signatures, params, returns. |
@@ -88,7 +92,7 @@ Need the whole API surface in one load? See the
 | [The File object](./docs/file.md) | The `File` class: `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`. |
 | [Globbing](./docs/glob.md) | Pattern syntax, `base` derivation, and the raw `globFiles()` / `deriveBase()` helpers. |
 | [Gulp plugin interop](./docs/gulp-plugins.md) | Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge. |
-| [The CLI](./docs/cli.md) | Invoking builds from the terminal, build-file discovery, `--watch`, and receiving your own `--flags` in a task. |
+| [The CLI](./docs/cli.md) | Invoking builds from the terminal, build-file discovery, `--watch`, machine-readable listings (`--list --json`, `--glob --json`), and receiving your own `--flags` in a task. |
 
 ### Export reference (quick map)
 
