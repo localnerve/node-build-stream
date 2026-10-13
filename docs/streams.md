@@ -103,6 +103,37 @@ on any source ends the merged stream with that error (rejecting a wrapping
 `pipeline()`), and passing anything that is not a readable (or no streams at
 all) throws a clear `TypeError` immediately, before any I/O.
 
+## `prefixDest(prefix)` — nest files under a subfolder of dest
+
+When several file sets share one output directory (`merge()` + one `dest()`),
+files from different matched bases land flat under the dest root and can
+collide. `prefixDest()` is the built-in "two globs into one dest, keep the
+subfolders" idiom: it rewrites each file's path so it lands at
+`dest/<prefix>/<original relative>`.
+
+```js
+import { src, dest, merge, prefixDest, pipeline } from 'node-build-stream';
+
+await pipeline(
+  merge(
+    src('src/styles/**/*.css').pipe(prefixDest('css')),
+    src('src/imgs/**/*.{png,svg}').pipe(prefixDest('img')),
+  ),
+  dest('dist'),
+);
+// dist/css/… and dist/img/… — no hand-mutated through() needed.
+```
+
+- The prefix is applied **relative to `file.base`**: it sits between the
+  matched base and the file's relative layout, so subfolder structure under
+  the base is preserved. Multi-segment prefixes like `'nested/deep'` work too.
+- Files are mutated in place (the same object flows downstream with its new
+  `path`); contents — including streamed contents — pass through untouched,
+  so it composes cleanly with `dest()` and any other transform.
+- A prefix that normalizes to nothing (`''`, `'.'`) is a no-op pass-through;
+  leading/trailing slashes are ignored.
+- **throws** `TypeError` immediately when the argument is not a string.
+
 ## `clean(patterns, opts?)` — delete files and directories
 
 `clean()` is node-build-stream's dependency-free `gulp-clean`. It resolves your patterns

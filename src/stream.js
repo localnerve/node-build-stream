@@ -255,6 +255,77 @@ export function merge(...streams) {
   return Readable.from(merged(), { objectMode: true });
 }
 
+/**
+ * Create an object-mode Transform that rewrites each file's path so it lands
+ * under a subfolder of the eventual dest() directory:
+ * `destDir/<prefix>/<original relative>` — the "two globs into one dest, keep
+ * the subfolders" idiom without hand-mutated through()s (cf. gulp-vinyl-dest).
+ *
+ * The prefix is applied relative to `file.base`: it sits between the matched
+ * base and the file's relative layout, so subfolder structure under the base
+ * is preserved. Files are mutated in place (the same object flows downstream
+ * with its new path); contents — including streamed contents — pass through
+ * untouched, so it composes cleanly with dest() and any other transform.
+ *
+ * A prefix that normalizes to nothing (`''`, `'.'`) is a no-op pass-through;
+ * leading/trailing slashes are ignored; multi-segment prefixes like
+ * `'nested/deep'` are supported.
+ *
+ * @param {string} prefix Subfolder name(s) to insert under the dest root.
+ * @returns {Transform} Object-mode transform (mutates file.path in place).
+ * @throws {TypeError} When `prefix` is not a string.
+ */
+export function prefixDest(prefix) {
+  if (typeof prefix !== 'string') {
+    throw new TypeError(`prefixDest() expects a string subfolder name. Got: ${describeValue(prefix)}.`);
+  }
+  const parts = prefix.split(/[\\/]+/).filter(Boolean);
+
+  /**
+   * Push each file through unchanged (the empty/`.`-prefix no-op).
+   *
+   * @param {import('./file.js').File} file The incoming File.
+   * @param {string} _enc Ignored encoding.
+   * @param {(err?: Error | null) => void} callback Completes the transform step.
+   * @this {Transform}
+   */
+  function passthrough(file, _enc, callback) {
+    this.push(file);
+    callback();
+  }
+
+  if (!parts.length) return new Transform({ objectMode: true, transform: passthrough });
+  const sub = parts.join('/');
+
+  /**
+   * Rewrite the file's path to <base>/<prefix>/<relative> and push it on.
+   *
+   * @param {import('./file.js').File} file The incoming File.
+   * @param {string} _enc Ignored encoding.
+   * @param {(err?: Error | null) => void} callback Completes the transform step.
+   * @this {Transform}
+   */
+  function rewrite(file, _enc, callback) {
+    try {
+      const p = file.path;
+      if (typeof p !== 'string' || !p) {
+        throw new TypeError('prefixDest() received a File without a string ".path".');
+      }
+      const base = typeof file.base === 'string' && file.base ? file.base : path.dirname(p);
+      let rel = '';
+      if (base && p.startsWith(base + path.sep)) rel = path.relative(base, p);
+      if (!rel || path.isAbsolute(rel) || rel.split(path.sep).includes('..')) rel = path.basename(p);
+      file.path = path.join(base, sub, rel);
+      this.push(file);
+      callback();
+    } catch (cause) {
+      callback(/** @type {Error} */ (cause));
+    }
+  }
+
+  return new Transform({ objectMode: true, transform: rewrite });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Raw-buffer <-> file-object bridge helpers (the csp-hashes pattern).         */
 /* These let plain Node.js byte streams feed gulp plugins without vinyl.       */

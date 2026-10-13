@@ -79,6 +79,27 @@ export declare function through(fn: (file: import('./file.js').File) => any): Tr
  */
 export declare function merge(...streams: (Readable | null | undefined)[]): Readable;
 /**
+ * Create an object-mode Transform that rewrites each file's path so it lands
+ * under a subfolder of the eventual dest() directory:
+ * `destDir/<prefix>/<original relative>` — the "two globs into one dest, keep
+ * the subfolders" idiom without hand-mutated through()s (cf. gulp-vinyl-dest).
+ *
+ * The prefix is applied relative to `file.base`: it sits between the matched
+ * base and the file's relative layout, so subfolder structure under the base
+ * is preserved. Files are mutated in place (the same object flows downstream
+ * with its new path); contents — including streamed contents — pass through
+ * untouched, so it composes cleanly with dest() and any other transform.
+ *
+ * A prefix that normalizes to nothing (`''`, `'.'`) is a no-op pass-through;
+ * leading/trailing slashes are ignored; multi-segment prefixes like
+ * `'nested/deep'` are supported.
+ *
+ * @param {string} prefix Subfolder name(s) to insert under the dest root.
+ * @returns {Transform} Object-mode transform (mutates file.path in place).
+ * @throws {TypeError} When `prefix` is not a string.
+ */
+export declare function prefixDest(prefix: string): Transform;
+/**
  * Wrap raw buffer/string chunks into file-like objects ({ path, contents }) so
  * an object-mode gulp plugin can consume a plain byte stream.
  *

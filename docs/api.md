@@ -15,7 +15,7 @@ Package facts: ESM-only · zero runtime dependencies (devDeps only) ·
 | --- | --- | --- | --- |
 | `node-build-stream` | `src/index.js` | all of the below (plus `pipeline`) | `nodeBuild` object |
 | `node-build-stream/task` | `src/task.js` | `task`, `seriesDefault`, `getTask`, `listTasks`, `series`, `parallel`, `run`, `runDefault` | — |
-| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `merge`, `wrapFile`, `unwrapFile` | — |
+| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `merge`, `prefixDest`, `wrapFile`, `unwrapFile` | — |
 | `node-build-stream/file` | `src/file.js` | `File` | `File` |
 | `node-build-stream/glob` | `src/glob.js` | `globFiles`, `deriveBase` | `globFiles` |
 | `node-build-stream/clean` | `src/clean.js` | `clean` | `clean` |
@@ -29,7 +29,8 @@ Note: there is **no** `node-build-stream/vinyl` subpath — `resolveFileClass` /
 
 Plain object mirroring gulp's common surface for quick migration. Keys:
 `task`, `series`, `parallel`, `run`, `runDefault`, `src`, `dest`, `through`,
-`merge`, `clean`, `watch`, `parseArgs`, `pipeline`. NOT on the default object
+`merge`, `prefixDest`, `clean`, `watch`, `parseArgs`, `pipeline`. NOT on the
+default object
 (named imports only): `getTask`, `listTasks`, `seriesDefault`, `wrapFile`,
 `unwrapFile`, `File`, `globFiles`, `deriveBase`, `resolveFileClass`,
 `resolveFileClassSync`.
@@ -186,6 +187,22 @@ function merge(...streams: (Readable | null | undefined)[]): Readable; // object
   wrapping `pipeline()`).
 - **throws** `TypeError` immediately (before I/O) for non-readable arguments or
   when no streams are given.
+
+### `prefixDest(prefix)`
+
+```ts
+function prefixDest(prefix: string): Transform; // objectMode both sides; mutates file.path in place
+```
+
+- Rewrites each file's path to `<base>/<prefix>/<original relative>` so it
+  lands under a subfolder of the eventual `dest()` directory — the "two globs
+  into one dest, keep the subfolders" idiom without hand-mutated `through()`s.
+- Multi-segment prefixes (`'nested/deep'`) supported; leading/trailing slashes
+  ignored; `''`/`'.'` is a no-op pass-through.
+- Mutates mutable Files in place (same object downstream); contents —
+  including streams — pass through untouched. Composes with `dest()` and any
+  transform.
+- **throws** `TypeError` immediately for non-string arguments.
 
 ### `through(fn)`
 

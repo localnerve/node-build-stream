@@ -2,7 +2,8 @@
  * node-build-stream — stream tests (src/stream.js).
  *
  * Covers src, dest, through (including the empty-glob warning and the output
- * guard), merge (fan-in), and the wrapFile/unwrapFile byte-stream bridge.
+ * guard), merge (fan-in), prefixDest (path rewriting), and the
+ * wrapFile/unwrapFile byte-stream bridge.
  *
  * Copyright (c) 2026 Alex Grant (@localnerve), LocalNerve LLC
  * Licensed under the MIT license.
@@ -14,7 +15,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, Readable, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { src, dest, through, merge, wrapFile, unwrapFile, File } from '../src/index.js';
+import { src, dest, through, merge, prefixDest, wrapFile, unwrapFile, File } from '../src/index.js';
 import { setupFixture, cleanupFixture } from './helpers/fixture.js';
 
 let tmp;
@@ -262,4 +263,53 @@ test('merge() validates its inputs', async () => {
   assert.throws(() => merge(null, undefined), /requires at least one/);
   assert.throws(() => merge('not-a-stream'), /expects object-mode readable streams/);
   assert.throws(() => merge(42), /expects object-mode readable streams/);
+});
+
+test('prefixDest() nests files under a subfolder of dest()', async () => {
+  const outDir = path.join(tmp, 'out-prefix');
+  await pipeline(
+    merge(
+      src('src/**/*.css', { cwd: tmp }).pipe(prefixDest('styles')),
+      src('src/*.txt', { cwd: tmp }).pipe(prefixDest('docs')),
+    ),
+    dest(outDir),
+  );
+  // The prefix sits between the matched base and the file's relative layout;
+  // subfolders under the base are preserved.
+  assert.equal(await fsp.readFile(path.join(outDir, 'styles', 'css', 'b.css'), 'utf8'), 'body{}');
+  assert.equal(await fsp.readFile(path.join(outDir, 'docs', 'a.txt'), 'utf8'), 'alpha');
+});
+
+test('prefixDest() supports multi-segment prefixes and preserves streamed contents', async () => {
+  const streamFile = new File({ cwd: tmp, path: path.join(tmp, 'p.bin'), base: tmp });
+  streamFile.contents = Readable.from([Buffer.from('s1'), Buffer.from('s2')]);
+  let seenPath;
+  await pipeline(
+    Readable.from([streamFile]),
+    prefixDest('nested/deep'),
+    through((f) => { seenPath = f.path; return f; }),
+    discardSink(),
+  );
+  // Same object flows downstream, mutated in place; contents untouched.
+  assert.equal(seenPath, path.join(tmp, 'nested', 'deep', 'p.bin'));
+  assert.equal(streamFile.relative, path.join('nested', 'deep', 'p.bin'));
+  assert.ok(streamFile.isStream());
+});
+
+test('prefixDest() treats empty and "." prefixes as no-ops', async () => {
+  const make = () => new File({ cwd: tmp, path: path.join(tmp, 'src', 'a.txt'), base: path.join(tmp, 'src') });
+  for (const p of ['', '.', './', '/']) {
+    const out = [];
+    await pipeline(
+      Readable.from([make()]),
+      prefixDest(p),
+      new Writable({ objectMode: true, write(f, _e, cb) { out.push(f); cb(); } }),
+    );
+    assert.equal(out[0].path, path.join(tmp, 'src', 'a.txt'));
+  }
+});
+
+test('prefixDest() validates its argument', () => {
+  assert.throws(() => prefixDest(42), /expects a string subfolder/);
+  assert.throws(() => prefixDest(null), /expects a string subfolder/);
 });
