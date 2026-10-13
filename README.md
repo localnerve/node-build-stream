@@ -1,4 +1,5 @@
 # node-build-stream
+<img src="./docs/images/nbs.svg" alt="NBS logo" width="160">
 
 A **no-dependency**, Node.js 24+ streaming build runner that replaces Gulp's core
 while staying compatible with the large ecosystem of existing Gulp plugins. AI friendly project and dist.
@@ -7,7 +8,7 @@ It is built entirely on `node:` built-ins — zero runtime dependencies. The onl
 thing it *optionally* reaches for at run time is your project's own `vinyl`
 package (if present), to maximize plugin compatibility.
 
-Local benchmarks show `node-build-stream` is about **20%** faster than `gulp`.  
+Benchmarks show `node-build-stream` is about **20%** faster than `gulp`.  
 More on the [benchmark](#benchmark).
 
 ```js
