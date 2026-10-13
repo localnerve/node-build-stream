@@ -13,9 +13,9 @@ Package facts: ESM-only · zero runtime dependencies (devDeps only) ·
 
 | Import | Module | Named exports | Default export |
 | --- | --- | --- | --- |
-| `node-build-stream` | `src/index.js` | all of the below (plus `pipeline`) | `nodeBuild` object |
-| `node-build-stream/task` | `src/task.js` | `task`, `seriesDefault`, `getTask`, `listTasks`, `series`, `parallel`, `run`, `runDefault` | — |
-| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `wrapFile`, `unwrapFile` | — |
+| `node-build-stream` | `src/index.js` | all of the below (plus `pipeline`, plus `FileError` from `src/file-error.js`) | `nodeBuild` object |
+| `node-build-stream/task` | `src/task.js` | `task`, `seriesDefault`, `getTask`, `listTasks`, `describeTasks`, `series`, `parallel`, `run`, `runDefault` | — |
+| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `merge`, `prefixDest`, `wrapFile`, `unwrapFile` (no `FileError` — main entry only) | — |
 | `node-build-stream/file` | `src/file.js` | `File` | `File` |
 | `node-build-stream/glob` | `src/glob.js` | `globFiles`, `deriveBase` | `globFiles` |
 | `node-build-stream/clean` | `src/clean.js` | `clean` | `clean` |
@@ -28,19 +28,21 @@ Note: there is **no** `node-build-stream/vinyl` subpath — `resolveFileClass` /
 ### Default export (`import nodeBuild from 'node-build-stream'`)
 
 Plain object mirroring gulp's common surface for quick migration. Keys:
-`task`, `series`, `parallel`, `run`, `runDefault`, `src`, `dest`, `through`,
-`clean`, `watch`, `parseArgs`, `pipeline`. NOT on the default object (named
-imports only): `getTask`, `listTasks`, `seriesDefault`, `wrapFile`, `unwrapFile`,
-`File`, `globFiles`, `deriveBase`, `resolveFileClass`, `resolveFileClassSync`.
+`task`, `series`, `parallel`, `run`, `runDefault`, `describeTasks`, `src`,
+`dest`, `through`, `merge`, `prefixDest`, `FileError`, `clean`, `watch`,
+`parseArgs`, `pipeline`.
+NOT on the default object (named imports only): `getTask`, `listTasks`,
+`seriesDefault`, `wrapFile`, `unwrapFile`, `File`, `globFiles`, `deriveBase`,
+`resolveFileClass`, `resolveFileClassSync`.
 
 ---
 
 ## Task API (from `node-build-stream` or `node-build-stream/task`)
 
-### `task(name, fn)`
+### `task(name, fn, description?)`
 
 ```ts
-function task(name: string, fn: TaskFn): TaskFn;
+function task(name: string, fn: TaskFn, description?: string | { description: string }): TaskFn;
 type TaskFn = () => any; // sync value | Promise | Node.js stream
 ```
 
@@ -48,8 +50,14 @@ type TaskFn = () => any; // sync value | Promise | Node.js stream
 - **fn**: task body — sync, async (returns a Promise), or stream-returning
   (e.g. `src(...).pipe(dest(...))`). A returned stream is awaited before the
   task counts as done.
+- **description** (optional): one-line purpose for humans/agents — a non-empty
+  string or `{ description }`. Stored with the task; powers `describeTasks()`
+  and the CLI's `--list --json`. Re-registering without one clears it. No
+  effect on how the task runs.
 - **returns** `fn` unchanged (for chaining / direct passing to `series`/`parallel`).
-- **throws** `TypeError` if `name` is not a non-empty string or `fn` is not a function.
+- **throws** `TypeError` if `name` is not a non-empty string, `fn` is not a
+  function, or `description` is neither a non-empty string nor
+  `{ description: <non-empty string> }`.
 - Registration order is preserved and visible via `listTasks()` / CLI `--list`.
 
 ### `seriesDefault(name)`
@@ -77,6 +85,18 @@ function listTasks(): string[];
 ```
 
 All registered task names, in registration order.
+
+### `describeTasks()`
+
+```ts
+function describeTasks(): TaskInfo[];
+type TaskInfo = { name: string; description: string | null };
+```
+
+Typed inventory of all registered tasks — one `{ name, description }` per task,
+in registration order. `description` is the one-line purpose passed to
+`task()`, or `null` when the task was registered without one. This is exactly
+what the CLI's `--list --json` prints (an empty registry yields `[]`).
 
 ### `series(...items)`
 
@@ -163,11 +183,49 @@ function dest(destDir: string, opts?: { cwd?: string }): Writable; // objectMode
   basename), creating parent dirs. Buffer/string written directly; streamed
   contents piped through.
 - Mutates mutable Files: sets `file.path` to the final on-disk location.
+- Async writes are serialized and awaited before `finish`: a wrapping
+  `pipeline()` cannot resolve while a write is still in flight.
 
-### `through(fn)`
+### `merge(...streams)`
 
 ```ts
-function through(fn: (file: File) => any): Transform; // objectMode both sides
+function merge(...streams: (Readable | null | undefined)[]): Readable; // objectMode, yields File
+```
+
+- Fan-in for multiple object-mode File streams; pass **every** source to the
+  call: `pipeline(merge(srcA, srcB, srcC), dest(...))`. This is the nbs form of
+  gulp's `srcA.pipe(merge(srcB)).pipe(dest)` idiom (Node's `.pipe()` ends its
+  destination when the source finishes, so the piped shape does not exist).
+- Returns a plain object-mode readable; sources are consumed **in the order
+  given** — each is fully drained before the next starts, per-source order and
+  backpressure preserved (backed by `Readable.from(asyncGenerator)`).
+- Accepts object-mode readables of File objects (`src()` results, other merges,
+  hand-built readables). `null`/`undefined` args are ignored.
+- An error on any source ends the merged stream with that error (rejecting a
+  wrapping `pipeline()`).
+- **throws** `TypeError` immediately (before I/O) for non-readable arguments or
+  when no streams are given.
+
+### `prefixDest(prefix)`
+
+```ts
+function prefixDest(prefix: string): Transform; // objectMode both sides; mutates file.path in place
+```
+
+- Rewrites each file's path to `<base>/<prefix>/<original relative>` so it
+  lands under a subfolder of the eventual `dest()` directory — the "two globs
+  into one dest, keep the subfolders" idiom without hand-mutated `through()`s.
+- Multi-segment prefixes (`'nested/deep'`) supported; leading/trailing slashes
+  ignored; `''`/`'.'` is a no-op pass-through.
+- Mutates mutable Files in place (same object downstream); contents —
+  including streams — pass through untouched. Composes with `dest()` and any
+  transform.
+- **throws** `TypeError` immediately for non-string arguments.
+
+### `through(fn, stage?)`
+
+```ts
+function through(fn: (file: File) => any, stage?: string): Transform; // objectMode both sides
 ```
 
 Per-file transform for native (non-gulp) build steps. `fn` may be async and may:
@@ -179,6 +237,31 @@ Per-file transform for native (non-gulp) build steps. `fn` may be async and may:
 
 **Validates output**: any non-null pushed value must be File-like (object with a
 string `.path`) or `through()` throws a clear `TypeError` naming what it got.
+
+**File context on errors**: when `fn` throws, the error is wrapped in a
+`FileError` naming the offending file (`err.file`) and the optional `stage`
+label (`err.stage`, default `'through()'`), with the original error preserved
+as `err.cause`. Message format: `<stage> failed on <file>: <original message>`.
+A non-string `stage` throws a `TypeError` immediately; a `FileError` thrown by
+`fn` passes through unchanged (no double-wrapping).
+
+### `class FileError` — file-context error (main entry only)
+
+```ts
+class FileError extends Error {
+  constructor(file: string, stage: string, cause: unknown);
+  name: 'FileError';
+  file: string;   // path of the file being processed when it threw
+  stage: string;  // label of the failing step (e.g. 'minify', 'through()')
+  cause: Error;   // the original error, intact
+}
+```
+
+Produced automatically by `through()` when its transform throws — one readable,
+parseable line (`<stage> failed on <file>: <original message>`) that points at
+the exact file and step. The CLI renders it as
+`✗ build failed — file <path> (stage <label>): <message>` plus the original
+stack. Check with `err.name === 'FileError'` or `instanceof FileError`.
 
 ### `wrapFile(filePath)` / `unwrapFile()` — raw-buffer ↔ file bridge
 

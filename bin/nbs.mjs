@@ -59,7 +59,9 @@ Options:
   --glob         List the files a glob pattern would match, without building
                  (repeatable; needs no build file). Matches print relative to the
                  pattern's base directory.
-  --json         Machine-readable output for --glob: one JSON object per pattern
+  --json         Machine-readable output: a JSON task inventory for --list
+                 ({ name, description } per task), one JSON object per pattern
+                 for --glob
   --help, -h     Show this help
 
 The build module exports nothing special; it calls task()/series()/parallel() from
@@ -177,7 +179,13 @@ async function main() {
   const mod = await import(pathToFileURL(buildFile).href);
 
   if (args.list) {
-    const { listTasks } = await import(new URL('../src/index.js', import.meta.url).href);
+    const { listTasks, describeTasks } = await import(new URL('../src/index.js', import.meta.url).href);
+    if (args.json) {
+      // Typed inventory for agents: [{ name, description }] — description is
+      // null when the task was registered without one.
+      console.log(JSON.stringify(describeTasks(), null, 2));
+      return;
+    }
     const names = listTasks();
     if (names.length === 0) {
       console.log('No tasks registered.');
@@ -206,8 +214,27 @@ async function main() {
   console.log(`\n✓ build complete (${path.basename(buildFile)})`);
 }
 
+/**
+ * Print a build failure. A FileError (thrown by through() steps) gets a
+ * single parseable line — `✗ build failed — file <path> (stage <label>):
+ * <message>` — followed by the original error's stack, so an agent or human
+ * can jump straight to the offending file and step. Anything else prints the
+ * usual full stack.
+ *
+ * @param {unknown} err The rejection value from main().
+ */
+function printFailure(err) {
+  if (err instanceof Error && err.name === 'FileError') {
+    const fe = /** @type {any} */ (err);
+    console.error(`\n✗ build failed — file ${fe.file} (stage ${fe.stage}): ${fe.cause?.message ?? fe.message}`);
+    if (fe.cause instanceof Error && fe.cause.stack) console.error(fe.cause.stack);
+  } else {
+    console.error('\n✗ build failed:');
+    console.error(err && err.stack ? err.stack : err);
+  }
+}
+
 main().catch((err) => {
-  console.error('\n✗ build failed:');
-  console.error(err && err.stack ? err.stack : err);
+  printFailure(err);
   process.exit(1);
 });

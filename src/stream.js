@@ -13,6 +13,7 @@ import path from 'node:path';
 import { Readable, Writable, Transform } from 'node:stream';
 import { globFiles, deriveBase } from './glob.js';
 import { resolveFileClassSync } from './vinyl.js';
+import { toFileError } from './file-error.js';
 
 /**
  * Options for {@link src}.
@@ -102,10 +103,16 @@ export function dest(destDir, opts = {}) {
   const cwd = path.resolve(opts.cwd ?? process.cwd());
   const outDir = path.resolve(cwd, destDir);
 
+  // Async writes are tracked in a queue so that end() (and therefore the
+  // 'finish' event and stream/promises pipeline()) cannot complete while a
+  // write is still in flight — Writable only honors backpressure via the
+  // synchronous part of write().
+  let queued = Promise.resolve();
+
   return new Writable({
     objectMode: true,
-    async write(file, _enc, callback) {
-      try {
+    write(file, _enc, callback) {
+      const op = queued.then(async () => {
         const target = path.join(outDir, file.relative || path.basename(file.path));
         await fs.promises.mkdir(path.dirname(target), { recursive: true });
         if (file.isStream()) {
@@ -125,10 +132,12 @@ export function dest(destDir, opts = {}) {
         }
         // Reflect the final location back on mutable File objects.
         if ('path' in file && typeof file.path === 'string') file.path = target;
-        callback();
-      } catch (cause) {
-        callback(/** @type {Error} */ (cause));
-      }
+      }).then(() => callback(), (cause) => callback(/** @type {Error} */ (cause)));
+      queued = op.catch(() => {}); // keep the chain alive across errors
+    },
+    /** @param {(err?: Error | null) => void} cb Completes once every write has settled. */
+    final(cb) {
+      queued.then(() => cb(), (err) => cb(/** @type {Error} */ (err)));
     },
   });
 }
@@ -172,10 +181,22 @@ function describeValue(value) {
  * Async functions are supported. Pushed values must be File-like (string `path`)
  * or through() throws a clear error.
  *
+ * When the transform function throws, the error is wrapped in a FileError
+ * naming the file being processed and the stage label, with the original
+ * error preserved as `.cause` — so a mid-stream failure points at the exact
+ * file (see docs/streams.md, "File context on errors").
+ *
  * @param {(file: import('./file.js').File) => any} fn Per-file transform function.
+ * @param {string} [stage] Optional label for this step (e.g. `'minify'`), used
+ *   in FileError messages when `fn` throws. Defaults to `'through()'`.
  * @returns {Transform} Object-mode transform.
+ * @throws {TypeError} When `stage` is provided but is not a string.
  */
-export function through(fn) {
+export function through(fn, stage) {
+  if (stage !== undefined && typeof stage !== 'string') {
+    throw new TypeError(`through() stage label must be a string. Got: ${describeValue(stage)}.`);
+  }
+  const stageLabel = stage ?? 'through()';
   return new Transform({
     objectMode: true,
     async transform(file, _enc, callback) {
@@ -189,10 +210,134 @@ export function through(fn) {
         }
         callback();
       } catch (cause) {
-        callback(/** @type {Error} */ (cause));
+        const filePath = file && typeof file.path === 'string' ? file.path : '(unknown file)';
+        callback(toFileError(cause, filePath, stageLabel));
       }
     },
   });
+}
+
+/**
+ * @param {any} value Candidate stream.
+ * @returns {boolean} True when the value is an async-iterable readable (e.g. src()).
+ */
+function isReadableStream(value) {
+  return !!value && typeof value === 'object' && typeof value[Symbol.asyncIterator] === 'function';
+}
+
+/**
+ * Merge multiple object-mode File streams into a single stream.
+ *
+ * Pass every source to the call — this is the fan-in shape Gulp builds use,
+ * adapted from gulp's `.pipe(merge(srcB))` idiom (which Node's `.pipe()` cannot
+ * express, since it ends its destination when the source finishes):
+ *
+ *   // Gulp:      srcA.pipe(merge(srcB)).pipe(dest('dist'))
+ *   // nbs:       pipeline(merge(srcA, srcB), dest('dist'))
+ *
+ * Backed by Readable.from(asyncGenerator), so backpressure is respected and
+ * each source is fully drained before the next one starts (sources are
+ * consumed in the order given; file order within each source is preserved).
+ * An error on any source rejects/ends the merged stream with that error.
+ *
+ * @param {...(Readable|null|undefined)} streams Object-mode readables of File
+ *   objects (e.g. src() results); `null`/`undefined` are ignored.
+ * @returns {Readable} Object-mode readable yielding every source file, in order.
+ * @throws {TypeError} When an argument is not a readable stream, or when no
+ *   streams are given.
+ */
+export function merge(...streams) {
+  const sources = streams.filter((s) => s != null);
+  for (const s of sources) {
+    if (!isReadableStream(s)) {
+      throw new TypeError(
+        `merge() expects object-mode readable streams (e.g. src() results). Got: ${describeValue(s)}.`,
+      );
+    }
+  }
+  if (!sources.length) {
+    throw new TypeError('merge() requires at least one stream.');
+  }
+
+  /** @yields {any} Every file from every source, in order. */
+  async function* merged() {
+    for (const stream of sources) {
+      for await (const file of stream) yield file;
+    }
+  }
+
+  return Readable.from(merged(), { objectMode: true });
+}
+
+/**
+ * Create an object-mode Transform that rewrites each file's path so it lands
+ * under a subfolder of the eventual dest() directory:
+ * `destDir/<prefix>/<original relative>` — the "two globs into one dest, keep
+ * the subfolders" idiom without hand-mutated through()s (cf. gulp-vinyl-dest).
+ *
+ * The prefix is applied relative to `file.base`: it sits between the matched
+ * base and the file's relative layout, so subfolder structure under the base
+ * is preserved. Files are mutated in place (the same object flows downstream
+ * with its new path); contents — including streamed contents — pass through
+ * untouched, so it composes cleanly with dest() and any other transform.
+ *
+ * A prefix that normalizes to nothing (`''`, `'.'`) is a no-op pass-through;
+ * leading/trailing slashes are ignored; multi-segment prefixes like
+ * `'nested/deep'` are supported.
+ *
+ * @param {string} prefix Subfolder name(s) to insert under the dest root.
+ * @returns {Transform} Object-mode transform (mutates file.path in place).
+ * @throws {TypeError} When `prefix` is not a string.
+ */
+export function prefixDest(prefix) {
+  if (typeof prefix !== 'string') {
+    throw new TypeError(`prefixDest() expects a string subfolder name. Got: ${describeValue(prefix)}.`);
+  }
+  const parts = prefix.split(/[\\/]+/).filter(Boolean);
+
+  /**
+   * Push each file through unchanged (the empty/`.`-prefix no-op).
+   *
+   * @param {import('./file.js').File} file The incoming File.
+   * @param {string} _enc Ignored encoding.
+   * @param {(err?: Error | null) => void} callback Completes the transform step.
+   * @this {Transform}
+   */
+  function passthrough(file, _enc, callback) {
+    this.push(file);
+    callback();
+  }
+
+  if (!parts.length) return new Transform({ objectMode: true, transform: passthrough });
+  const sub = parts.join('/');
+
+  /**
+   * Rewrite the file's path to <base>/<prefix>/<relative> and push it on.
+   *
+   * @param {import('./file.js').File} file The incoming File.
+   * @param {string} _enc Ignored encoding.
+   * @param {(err?: Error | null) => void} callback Completes the transform step.
+   * @this {Transform}
+   */
+  function rewrite(file, _enc, callback) {
+    try {
+      const p = file.path;
+      if (typeof p !== 'string' || !p) {
+        throw new TypeError('prefixDest() received a File without a string ".path".');
+      }
+      const base = typeof file.base === 'string' && file.base ? file.base : path.dirname(p);
+      let rel = '';
+      if (base && p.startsWith(base + path.sep)) rel = path.relative(base, p);
+      if (!rel || path.isAbsolute(rel) || rel.split(path.sep).includes('..')) rel = path.basename(p);
+      file.path = path.join(base, sub, rel);
+      this.push(file);
+      callback();
+    } catch (cause) {
+      callback(/** @type {Error} */ (cause));
+    }
+  }
+
+  return new Transform({ objectMode: true, transform: rewrite });
 }
 
 /* -------------------------------------------------------------------------- */

@@ -9,6 +9,7 @@ receive **your own** command-line arguments inside a task.
 
 ```sh
 node /path/to/node-build-stream/bin/nbs.mjs [taskName] [--config <file>] [--watch] [--list]
+node /path/to/node-build-stream/bin/nbs.mjs --list --json
 node /path/to/node-build-stream/bin/nbs.mjs --glob <pattern>... [--json]
 ```
 
@@ -19,7 +20,7 @@ node /path/to/node-build-stream/bin/nbs.mjs --glob <pattern>... [--json]
 | `--watch`           | Build, then re-run on asset changes (see [Watching](#watching)). |
 | `--list`, `-l`      | Print the names of all registered tasks and exit — runs nothing. |
 | `--glob <pattern>`  | List what a glob pattern matches, without building — repeatable, needs no build file (see [Glob report](#glob-report)). |
-| `--json`            | Machine-readable output for `--glob`.                          |
+| `--json`            | Machine-readable output: a JSON task inventory for `--list`, one JSON object per pattern for `--glob`. |
 | `--help`, `-h`      | Print usage and exit.                                          |
 
 The package ships a `bin` entry, so once it is installed (or linked) in your
@@ -61,7 +62,15 @@ The CLI imports your build file so its `task(...)` registrations run, then:
    every registered task in parallel (see [Tasks](./tasks.md)).
 
 On success it prints `✓ build complete (<file>)`; on failure it prints the error
-and exits with a non-zero code — exactly what CI needs.
+and exits with a non-zero code — exactly what CI needs. A failure inside a
+`through()` step is wrapped in a `FileError`, which the CLI renders as one
+parseable line plus the original stack:
+
+```
+✗ build failed — file /proj/src/css/site.css (stage minify): Unexpected token } at 12:40
+```
+
+See [Streams → File context on errors](./streams.md#file-context-on-errors-fileerror).
 
 ## Listing tasks
 
@@ -79,6 +88,25 @@ manifest
 This is the same registry behind the exported [`listTasks()`](./tasks.md), so
 what you see here is exactly what the CLI (and your build file) can run. If no
 tasks are registered it prints `No tasks registered.` and still exits 0.
+
+### Machine-readable listing (`--list --json`)
+
+For agents or tools that drive the build, `--list --json` prints the same
+registry as a typed JSON inventory — one `{ name, description }` object per
+task, in registration order. The `description` is the one-line purpose you
+passed to [`task()`](./tasks.md); it is `null` when the task was registered
+without one:
+
+```sh
+$ node ./bin/nbs.mjs --list --json
+[
+  { "name": "html", "description": "Copy HTML templates" },
+  { "name": "css", "description": null }
+]
+```
+
+An empty registry prints `[]`. The text listing above is unchanged: one name
+per line, no descriptions.
 
 ## Glob report
 

@@ -14,6 +14,8 @@ import { isReadable as streamIsReadable } from 'node:stream';
 import { finished as streamFinished } from 'node:stream/promises';
 
 const tasks = new Map();
+/** Optional one-line descriptions for registered tasks, keyed by name. */
+const taskDescriptions = new Map();
 /** @type {string|null} */
 let defaultTaskName = null;
 
@@ -36,16 +38,49 @@ let defaultTaskName = null;
  * Register a named task in the registry. Returns the function unchanged so it can
  * be chained, reused, or passed directly to series()/parallel().
  *
+ * The optional third argument is a one-line **description** of what the task
+ * does — pure metadata for humans and agents (it powers `describeTasks()` and
+ * the CLI's `--list --json`); it has no effect on how the task runs. It may be
+ * a non-empty string or an object with a `description` property. Re-registering
+ * a task without a description clears any previously stored one.
+ *
  * @param {string} name A non-empty string used to run the task by name.
  * @param {TaskFn} fn The task body (sync, async, or stream-returning).
+ * @param {string|{description: string}} [description] Optional one-line purpose of the task.
  * @returns {TaskFn} The same `fn`, for chaining or direct use.
- * @throws {TypeError} If `name` is not a non-empty string or `fn` is not a function.
+ * @throws {TypeError} If `name` is not a non-empty string, `fn` is not a function,
+ *   or `description` is neither a non-empty string nor `{ description: <non-empty string> }`.
  */
-export function task(name, fn) {
+export function task(name, fn, description) {
   if (typeof name !== 'string' || !name.length) throw new TypeError('task name must be a non-empty string');
   if (!fn || typeof fn !== 'function') throw new TypeError(`task "${name}" must be a function`);
+  const desc = parseTaskDescription(name, description);
   tasks.set(name, fn);
+  if (desc === null) taskDescriptions.delete(name);
+  else taskDescriptions.set(name, desc);
   return fn;
+}
+
+/**
+ * Normalize the optional description argument of task() to a string or null.
+ *
+ * @param {string} name The task name, used in error messages.
+ * @param {any} description A non-empty string, `{ description: <non-empty string> }`,
+ *   or undefined (no description).
+ * @returns {string|null} The description string, or null when none was given.
+ * @throws {TypeError} If `description` has any other shape.
+ */
+function parseTaskDescription(name, description) {
+  if (description === undefined) return null;
+  if (typeof description === 'string') {
+    if (!description.length) throw new TypeError(`task "${name}" description must be a non-empty string`);
+    return description;
+  }
+  if (description && typeof description === 'object' && typeof description.description === 'string') {
+    if (!description.description.length) throw new TypeError(`task "${name}" description must be a non-empty string`);
+    return description.description;
+  }
+  throw new TypeError(`task "${name}" description must be a non-empty string or an object with a "description" property`);
 }
 
 /**
@@ -79,6 +114,27 @@ export function getTask(name) {
  */
 export function listTasks() {
   return [...tasks.keys()];
+}
+
+/**
+ * A single entry of the task inventory returned by describeTasks().
+ *
+ * @typedef {object} TaskInfo
+ * @property {string} name The registered task name.
+ * @property {string|null} description The one-line purpose passed to task(),
+ *   or null when the task was registered without a description.
+ */
+
+/**
+ * Return a typed inventory of all registered tasks — each with its name and
+ * optional one-line description — in registration order. This is the data
+ * behind the CLI's `--list --json` output, for agents or tools that drive a
+ * build and need to know what tasks exist and what they do.
+ *
+ * @returns {TaskInfo[]} One entry per registered task (empty array when none).
+ */
+export function describeTasks() {
+  return [...tasks.keys()].map((name) => ({ name, description: taskDescriptions.get(name) ?? null }));
 }
 
 /**

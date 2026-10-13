@@ -79,25 +79,32 @@ for someone who has never used Gulp or this project before. Start with
 Need the whole API surface in one load? See the
 [API reference](./docs/api.md) — every entry point, export, signature, and return type.
 
+AI agents: start from [llms.txt](./llms.txt) (a compact index of this package pointing at
+`docs/api.md` as the single-load reference); contributor-agent rules live in
+[AGENTS.md](./AGENTS.md).
+
 | Guide | What it covers |
 | ----- | -------------- |
 | [API reference](./docs/api.md) | The complete export surface in one dense file: entry points, signatures, params, returns. |
 | [Getting started](./docs/getting-started.md) | The mental model, install, and a first build (CLI + code). |
-| [Tasks, series & parallel](./docs/tasks.md) | `task()`, `series()`, `parallel()`, `run()`, `getTask()`, `listTasks()`, `seriesDefault()`, `runDefault()` — defining and composing work. |
-| [Streams: src, dest & through](./docs/streams.md) | `src()`, `dest()`, `clean()`, `through()`, `watch()`, and `pipeline()` — moving files in, transforming them, writing them out, deleting, and re-running on change. |
+| [Tasks, series & parallel](./docs/tasks.md) | `task()` (with optional one-line descriptions), `series()`, `parallel()`, `run()`, `getTask()`, `listTasks()`, `describeTasks()`, `seriesDefault()`, `runDefault()` — defining and composing work. |
+| [Streams: src, dest & through](./docs/streams.md) | `src()`, `dest()`, `merge()`, `prefixDest()`, `clean()`, `through()` (with `FileError` file-context errors), `watch()`, and `pipeline()` — moving files in, combining streams, nesting output under subfolders, transforming them, writing them out, deleting, and re-running on change. |
 | [The File object](./docs/file.md) | The `File` class: `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`. |
 | [Globbing](./docs/glob.md) | Pattern syntax, `base` derivation, and the raw `globFiles()` / `deriveBase()` helpers. |
 | [Gulp plugin interop](./docs/gulp-plugins.md) | Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge. |
-| [The CLI](./docs/cli.md) | Invoking builds from the terminal, build-file discovery, `--watch`, and receiving your own `--flags` in a task. |
+| [The CLI](./docs/cli.md) | Invoking builds from the terminal, build-file discovery, `--watch`, machine-readable listings (`--list --json`, `--glob --json`), and receiving your own `--flags` in a task. |
 
 ### Export reference (quick map)
 
 - **Tasks:** [`task`](./docs/tasks.md), [`series`](./docs/tasks.md),
   [`parallel`](./docs/tasks.md), [`run`](./docs/tasks.md),
   [`runDefault`](./docs/tasks.md), [`getTask`](./docs/tasks.md),
-  [`listTasks`](./docs/tasks.md), [`seriesDefault`](./docs/tasks.md)
+  [`listTasks`](./docs/tasks.md), [`describeTasks`](./docs/tasks.md),
+  [`seriesDefault`](./docs/tasks.md)
 - **Streams:** [`src`](./docs/streams.md), [`dest`](./docs/streams.md),
-  [`through`](./docs/streams.md), [`clean`](./docs/streams.md),
+  [`merge`](./docs/streams.md), [`prefixDest`](./docs/streams.md),
+  [`through`](./docs/streams.md) + [`FileError`](./docs/streams.md#file-context-on-errors-fileerror),
+  [`clean`](./docs/streams.md),
   [`watch`](./docs/streams.md#watch), [`pipeline`](./docs/streams.md),
   [`wrapFile`](./docs/gulp-plugins.md), [`unwrapFile`](./docs/gulp-plugins.md)
 - **Files:** [`File`](./docs/file.md), [`resolveFileClass`](./docs/gulp-plugins.md),

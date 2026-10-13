@@ -5,7 +5,7 @@ steps that you can run in an order. In node-build-stream those steps are **tasks
 and the ordering tools are `series()` and `parallel()`. This page explains how
 to define tasks, what kinds of functions they may be, and how to compose them.
 
-## Registering a task with `task(name, fn)`
+## Registering a task with `task(name, fn, description?)`
 
 ```js
 import { task } from 'node-build-stream';
@@ -23,6 +23,20 @@ task('clean', async () => {
   - **stream-returning** — returns a Node.js stream such as
     `src(...).pipe(dest(...))` (see [Streams](./streams.md)). When this happens,
     the task is considered *done* only when that stream finishes writing.
+- `description` (optional) is a **one-line purpose** for the task — pure
+  metadata for humans and AI agents, with no effect on how the task runs. It
+  may be a non-empty string or an object `{ description }`. It powers
+  [`describeTasks()`](#handy-extras) and the CLI's `--list --json`
+  ([CLI](./cli.md)), so an agent driving your build can see what each task
+  does before invoking it:
+
+  ```js
+  task('css', () => src('src/*.css').pipe(dest('dist')), 'Copy and process stylesheets');
+  // or, with an options object:
+  task('css', fn, { description: 'Copy and process stylesheets' });
+  ```
+
+  Re-registering a task without a description clears any previously stored one.
 
 `task()` returns `fn` itself, so you can chain or reuse it:
 
@@ -113,6 +127,7 @@ export default () => parallel('html', 'css').then(() => series('manifest'));
 | `run(nameOrFn)`       | Run a single named task (or function) to completion.                    |
 | `getTask(name)`       | Look up a registered task by name; throws if unknown.                   |
 | `listTasks()`         | Return the names of all registered tasks, in registration order.        |
+| `describeTasks()`     | Return each registered task as `{ name, description }`, in order — the data behind `--list --json`. |
 | `seriesDefault(name)` | Mark one task as **the** default when nothing is specified on the CLI.  |
 | `runDefault()`        | Run the `seriesDefault` task, or every registered task in parallel.     |
 

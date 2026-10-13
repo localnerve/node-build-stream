@@ -99,6 +99,26 @@ test('CLI -l works and reports an empty registry', async () => {
   assert.equal(out.trim(), 'No tasks registered.');
 });
 
+test('CLI --list --json emits a typed inventory (name + description)', async () => {
+  const cwd = await freshDir();
+  const source = [
+    `import { task } from '${INDEX}';`,
+    'task(\'styles\', () => {}, \'Copy and process stylesheets\');',
+    'task(\'scripts\', () => {});',
+  ].join('\n') + '\n';
+  const out = await runCli(cwd, source, ['--list', '--json']);
+  assert.deepEqual(JSON.parse(out), [
+    { name: 'styles', description: 'Copy and process stylesheets' },
+    { name: 'scripts', description: null },
+  ]);
+});
+
+test('CLI --list --json reports an empty registry as []', async () => {
+  const cwd = await freshDir();
+  const out = await runCli(cwd, `import '${INDEX}';\n`, ['--list', '--json']);
+  assert.deepEqual(JSON.parse(out), []);
+});
+
 test('CLI --help and -h print usage without needing a build file', async () => {
   const cwd = await freshDir(); // deliberately empty — no build file at all
   for (const flag of ['--help', '-h']) {
@@ -216,6 +236,22 @@ test('CLI exits non-zero and prints the error when a task fails', async () => {
   const { stderr } = await runCliExpectFail(cwd, source, ['boom']);
   assert.match(stderr, /build failed/);
   assert.match(stderr, /kapow/);
+});
+
+test('CLI prints a parseable one-liner for FileError (file + stage) and exits non-zero', async () => {
+  const cwd = await freshDir();
+  await fs.mkdir(path.join(cwd, 'src'));
+  await fs.writeFile(path.join(cwd, 'src', 'a.txt'), 'hi');
+  const source = [
+    `import { task, src, through, dest, pipeline } from '${INDEX}';`,
+    'task(\'build\', () => pipeline(',
+    '  src(\'src/a.txt\'),',
+    '  through(() => { throw new Error(\'boom\'); }, \'minify\'),',
+    '  dest(\'out\'),',
+    '));',
+  ].join('\n') + '\n';
+  const { stderr } = await runCliExpectFail(cwd, source, ['build']);
+  assert.match(stderr, /✗ build failed — file .*a\.txt \(stage minify\): boom/);
 });
 
 test('CLI --watch without globs on the default export fails clearly', async () => {
