@@ -14,7 +14,7 @@ Package facts: ESM-only · zero runtime dependencies (devDeps only) ·
 | Import | Module | Named exports | Default export |
 | --- | --- | --- | --- |
 | `node-build-stream` | `src/index.js` | all of the below (plus `pipeline`, plus `FileError` from `src/file-error.js`) | `nodeBuild` object |
-| `node-build-stream/task` | `src/task.js` | `task`, `seriesDefault`, `getTask`, `listTasks`, `series`, `parallel`, `run`, `runDefault` | — |
+| `node-build-stream/task` | `src/task.js` | `task`, `seriesDefault`, `getTask`, `listTasks`, `describeTasks`, `series`, `parallel`, `run`, `runDefault` | — |
 | `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `merge`, `prefixDest`, `wrapFile`, `unwrapFile` (no `FileError` — main entry only) | — |
 | `node-build-stream/file` | `src/file.js` | `File` | `File` |
 | `node-build-stream/glob` | `src/glob.js` | `globFiles`, `deriveBase` | `globFiles` |
@@ -28,8 +28,9 @@ Note: there is **no** `node-build-stream/vinyl` subpath — `resolveFileClass` /
 ### Default export (`import nodeBuild from 'node-build-stream'`)
 
 Plain object mirroring gulp's common surface for quick migration. Keys:
-`task`, `series`, `parallel`, `run`, `runDefault`, `src`, `dest`, `through`,
-`merge`, `prefixDest`, `FileError`, `clean`, `watch`, `parseArgs`, `pipeline`.
+`task`, `series`, `parallel`, `run`, `runDefault`, `describeTasks`, `src`,
+`dest`, `through`, `merge`, `prefixDest`, `FileError`, `clean`, `watch`,
+`parseArgs`, `pipeline`.
 NOT on the default object (named imports only): `getTask`, `listTasks`,
 `seriesDefault`, `wrapFile`, `unwrapFile`, `File`, `globFiles`, `deriveBase`,
 `resolveFileClass`, `resolveFileClassSync`.
@@ -38,10 +39,10 @@ NOT on the default object (named imports only): `getTask`, `listTasks`,
 
 ## Task API (from `node-build-stream` or `node-build-stream/task`)
 
-### `task(name, fn)`
+### `task(name, fn, description?)`
 
 ```ts
-function task(name: string, fn: TaskFn): TaskFn;
+function task(name: string, fn: TaskFn, description?: string | { description: string }): TaskFn;
 type TaskFn = () => any; // sync value | Promise | Node.js stream
 ```
 
@@ -49,8 +50,14 @@ type TaskFn = () => any; // sync value | Promise | Node.js stream
 - **fn**: task body — sync, async (returns a Promise), or stream-returning
   (e.g. `src(...).pipe(dest(...))`). A returned stream is awaited before the
   task counts as done.
+- **description** (optional): one-line purpose for humans/agents — a non-empty
+  string or `{ description }`. Stored with the task; powers `describeTasks()`
+  and the CLI's `--list --json`. Re-registering without one clears it. No
+  effect on how the task runs.
 - **returns** `fn` unchanged (for chaining / direct passing to `series`/`parallel`).
-- **throws** `TypeError` if `name` is not a non-empty string or `fn` is not a function.
+- **throws** `TypeError` if `name` is not a non-empty string, `fn` is not a
+  function, or `description` is neither a non-empty string nor
+  `{ description: <non-empty string> }`.
 - Registration order is preserved and visible via `listTasks()` / CLI `--list`.
 
 ### `seriesDefault(name)`
@@ -78,6 +85,18 @@ function listTasks(): string[];
 ```
 
 All registered task names, in registration order.
+
+### `describeTasks()`
+
+```ts
+function describeTasks(): TaskInfo[];
+type TaskInfo = { name: string; description: string | null };
+```
+
+Typed inventory of all registered tasks — one `{ name, description }` per task,
+in registration order. `description` is the one-line purpose passed to
+`task()`, or `null` when the task was registered without one. This is exactly
+what the CLI's `--list --json` prints (an empty registry yields `[]`).
 
 ### `series(...items)`
 

@@ -9,7 +9,7 @@
  * Copyright (c) 2026 Alex Grant (@localnerve), LocalNerve LLC
  * Licensed under the MIT license.
  */
-import { task, series, parallel, run, runDefault, getTask, listTasks, seriesDefault } from './task.js';
+import { task, series, parallel, run, runDefault, getTask, listTasks, describeTasks, seriesDefault } from './task.js';
 import { src, dest, through, merge, prefixDest, wrapFile, unwrapFile } from './stream.js';
 import { FileError } from './file-error.js';
 import { File } from './file.js';
@@ -17,7 +17,7 @@ import { resolveFileClass, resolveFileClassSync } from './vinyl.js';
 import { clean } from './clean.js';
 import { parseArgs } from './args.js';
 import { watch } from './watch.js';
-export { task, series, parallel, run, runDefault, getTask, listTasks, seriesDefault };
+export { task, series, parallel, run, runDefault, getTask, listTasks, describeTasks, seriesDefault };
 export { src, dest, through, merge, prefixDest, wrapFile, unwrapFile };
 export { pipeline } from 'node:stream/promises';
 export { FileError };
@@ -35,6 +35,7 @@ declare const nodeBuild: {
     parallel: typeof parallel;
     run: typeof run;
     runDefault: typeof runDefault;
+    describeTasks: typeof describeTasks;
     src: typeof src;
     dest: typeof dest;
     through: typeof through;

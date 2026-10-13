@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { task, series, parallel, run, listTasks, getTask, src, dest } from '../src/index.js';
+import { task, series, parallel, run, listTasks, describeTasks, getTask, src, dest } from '../src/index.js';
 import { setupFixture, cleanupFixture } from './helpers/fixture.js';
 
 let tmp;
@@ -176,4 +176,36 @@ test('a task returning a duplex stream is awaited on its writable side', async (
   dup.end();
   await run(() => dup);
   assert.ok(writeDone);
+});
+
+test('task() stores an optional one-line description (string or { description })', () => {
+  task('desc-str', async () => {}, 'Copy site assets');
+  task('desc-obj', async () => {}, { description: 'Write manifest.json' });
+  const info = Object.fromEntries(describeTasks().map((t) => [t.name, t.description]));
+  assert.equal(info['desc-str'], 'Copy site assets');
+  assert.equal(info['desc-obj'], 'Write manifest.json');
+});
+
+test('describeTasks() lists every task in registration order; null when no description', () => {
+  task('inv-a', async () => {});
+  task('inv-b', async () => {}, 'Second step');
+  const slice = describeTasks().filter((t) => t.name === 'inv-a' || t.name === 'inv-b');
+  assert.deepEqual(slice, [
+    { name: 'inv-a', description: null },
+    { name: 'inv-b', description: 'Second step' },
+  ]);
+});
+
+test('re-registering a task without a description clears the stored one', () => {
+  task('re-desc', async () => {}, 'Old purpose');
+  assert.equal(describeTasks().find((t) => t.name === 're-desc')?.description, 'Old purpose');
+  task('re-desc', async () => {});
+  assert.equal(describeTasks().find((t) => t.name === 're-desc')?.description, null);
+});
+
+test('task() rejects invalid descriptions', () => {
+  assert.throws(() => task('bad-desc', async () => {}, ''), TypeError);
+  assert.throws(() => task('bad-desc2', async () => {}, { description: '' }), TypeError);
+  assert.throws(() => task('bad-desc3', async () => {}, {}), TypeError);
+  assert.throws(() => task('bad-desc4', async () => {}, 42), TypeError);
 });

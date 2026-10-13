@@ -9,7 +9,7 @@
  * Copyright (c) 2026 Alex Grant (@localnerve), LocalNerve LLC
  * Licensed under the MIT license.
  */
-import { task, series, parallel, run, runDefault, getTask, listTasks, seriesDefault } from './task.js';
+import { task, series, parallel, run, runDefault, getTask, listTasks, describeTasks, seriesDefault } from './task.js';
 import { src, dest, through, merge, prefixDest, wrapFile, unwrapFile } from './stream.js';
 import { FileError } from './file-error.js';
 import { File } from './file.js';
@@ -18,7 +18,7 @@ import { clean } from './clean.js';
 import { parseArgs } from './args.js';
 import { watch } from './watch.js';
 
-export { task, series, parallel, run, runDefault, getTask, listTasks, seriesDefault };
+export { task, series, parallel, run, runDefault, getTask, listTasks, describeTasks, seriesDefault };
 export { src, dest, through, merge, prefixDest, wrapFile, unwrapFile };
 export { pipeline } from 'node:stream/promises';
 export { FileError };
@@ -31,5 +31,5 @@ export { watch };
 
 /** Default export mirrors gulp's common surface for quick migration. */
 import { pipeline as _pipeline } from 'node:stream/promises';
-const nodeBuild = { task, series, parallel, run, runDefault, src, dest, through, merge, prefixDest, FileError, clean, watch, parseArgs, pipeline: _pipeline };
+const nodeBuild = { task, series, parallel, run, runDefault, describeTasks, src, dest, through, merge, prefixDest, FileError, clean, watch, parseArgs, pipeline: _pipeline };
 export default nodeBuild;
