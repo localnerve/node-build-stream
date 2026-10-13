@@ -1,5 +1,5 @@
 # node-build-stream
-<img src="./docs/images/nbs.svg" alt="NBS logo" width="160">
+<img src="https://github.com/localnerve/node-build-stream/blob/main/docs/images/nbs.svg?raw=true" alt="NBS logo" width="160">
 
 A **no-dependency**, Node.js 24+ streaming build runner that replaces Gulp's core
 while staying compatible with the large ecosystem of existing Gulp plugins. AI friendly project and dist.
