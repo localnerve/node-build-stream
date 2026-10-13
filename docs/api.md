@@ -15,7 +15,7 @@ Package facts: ESM-only · zero runtime dependencies (devDeps only) ·
 | --- | --- | --- | --- |
 | `node-build-stream` | `src/index.js` | all of the below (plus `pipeline`) | `nodeBuild` object |
 | `node-build-stream/task` | `src/task.js` | `task`, `seriesDefault`, `getTask`, `listTasks`, `series`, `parallel`, `run`, `runDefault` | — |
-| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `wrapFile`, `unwrapFile` | — |
+| `node-build-stream/stream` | `src/stream.js` | `src`, `dest`, `through`, `merge`, `wrapFile`, `unwrapFile` | — |
 | `node-build-stream/file` | `src/file.js` | `File` | `File` |
 | `node-build-stream/glob` | `src/glob.js` | `globFiles`, `deriveBase` | `globFiles` |
 | `node-build-stream/clean` | `src/clean.js` | `clean` | `clean` |
@@ -29,9 +29,10 @@ Note: there is **no** `node-build-stream/vinyl` subpath — `resolveFileClass` /
 
 Plain object mirroring gulp's common surface for quick migration. Keys:
 `task`, `series`, `parallel`, `run`, `runDefault`, `src`, `dest`, `through`,
-`clean`, `watch`, `parseArgs`, `pipeline`. NOT on the default object (named
-imports only): `getTask`, `listTasks`, `seriesDefault`, `wrapFile`, `unwrapFile`,
-`File`, `globFiles`, `deriveBase`, `resolveFileClass`, `resolveFileClassSync`.
+`merge`, `clean`, `watch`, `parseArgs`, `pipeline`. NOT on the default object
+(named imports only): `getTask`, `listTasks`, `seriesDefault`, `wrapFile`,
+`unwrapFile`, `File`, `globFiles`, `deriveBase`, `resolveFileClass`,
+`resolveFileClassSync`.
 
 ---
 
@@ -163,6 +164,28 @@ function dest(destDir: string, opts?: { cwd?: string }): Writable; // objectMode
   basename), creating parent dirs. Buffer/string written directly; streamed
   contents piped through.
 - Mutates mutable Files: sets `file.path` to the final on-disk location.
+- Async writes are serialized and awaited before `finish`: a wrapping
+  `pipeline()` cannot resolve while a write is still in flight.
+
+### `merge(...streams)`
+
+```ts
+function merge(...streams: (Readable | null | undefined)[]): Readable; // objectMode, yields File
+```
+
+- Fan-in for multiple object-mode File streams; pass **every** source to the
+  call: `pipeline(merge(srcA, srcB, srcC), dest(...))`. This is the nbs form of
+  gulp's `srcA.pipe(merge(srcB)).pipe(dest)` idiom (Node's `.pipe()` ends its
+  destination when the source finishes, so the piped shape does not exist).
+- Returns a plain object-mode readable; sources are consumed **in the order
+  given** — each is fully drained before the next starts, per-source order and
+  backpressure preserved (backed by `Readable.from(asyncGenerator)`).
+- Accepts object-mode readables of File objects (`src()` results, other merges,
+  hand-built readables). `null`/`undefined` args are ignored.
+- An error on any source ends the merged stream with that error (rejecting a
+  wrapping `pipeline()`).
+- **throws** `TypeError` immediately (before I/O) for non-readable arguments or
+  when no streams are given.
 
 ### `through(fn)`
 

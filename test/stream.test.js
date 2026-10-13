@@ -2,7 +2,7 @@
  * node-build-stream — stream tests (src/stream.js).
  *
  * Covers src, dest, through (including the empty-glob warning and the output
- * guard), and the wrapFile/unwrapFile byte-stream bridge.
+ * guard), merge (fan-in), and the wrapFile/unwrapFile byte-stream bridge.
  *
  * Copyright (c) 2026 Alex Grant (@localnerve), LocalNerve LLC
  * Licensed under the MIT license.
@@ -14,7 +14,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, Readable, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { src, dest, through, wrapFile, unwrapFile, File } from '../src/index.js';
+import { src, dest, through, merge, wrapFile, unwrapFile, File } from '../src/index.js';
 import { setupFixture, cleanupFixture } from './helpers/fixture.js';
 
 let tmp;
@@ -211,4 +211,55 @@ test('wrapFile/unwrapFile bridge raw byte streams to gulp-style plugins', async 
   );
 
   assert.equal(await fsp.readFile(outPath, 'utf8'), 'plain bytes [hashed]');
+});
+
+test('merge() direct call combines file streams in order', async () => {
+  const outDir = path.join(tmp, 'out-merge');
+  await pipeline(
+    merge(src('src/a.txt', { cwd: tmp }), src('src/css/b.css', { cwd: tmp }), src('src/js/c.js', { cwd: tmp })),
+    dest(outDir),
+  );
+  // Wildcard-free patterns derive their base as the file's own directory,
+  // so these land flat (gulp/vinyl-fs semantics — see docs/glob.md).
+  assert.equal(await fsp.readFile(path.join(outDir, 'a.txt'), 'utf8'), 'alpha');
+  assert.equal(await fsp.readFile(path.join(outDir, 'b.css'), 'utf8'), 'body{}');
+  assert.equal(await fsp.readFile(path.join(outDir, 'c.js'), 'utf8'), 'console.log(1)');
+});
+
+test('merge() result chains with plain .pipe()', async () => {
+  const outDir = path.join(tmp, 'out-merge-pipe');
+  // The merged readable ends when its last source drains, so a classic
+  // .pipe() chain from it works (unlike gulp's pipe(merge()) idiom).
+  const sink = dest(outDir);
+  merge(src('src/a.txt', { cwd: tmp }), src('src/css/b.css', { cwd: tmp })).pipe(sink);
+  await new Promise((resolve, reject) => { sink.on('finish', resolve); sink.on('error', reject); });
+  assert.equal(await fsp.readFile(path.join(outDir, 'a.txt'), 'utf8'), 'alpha');
+  assert.equal(await fsp.readFile(path.join(outDir, 'b.css'), 'utf8'), 'body{}');
+});
+
+test('merge() preserves per-source order and file identity', async () => {
+  const seen = [];
+  for await (const f of merge(src('src/*.txt', { cwd: tmp }), src('skip/*.txt', { cwd: tmp }))) {
+    seen.push(f.relative);
+  }
+  assert.deepEqual(seen, ['a.txt', 'me.txt']);
+});
+
+test('merge() propagates source errors to the merged stream', async () => {
+  // A source that errors on read surfaces as an error on the merged stream.
+  const bad = new Readable({
+    objectMode: true,
+    read() { this.destroy(new Error('source boom')); },
+  });
+  await assert.rejects(
+    pipeline(merge(src('src/*.txt', { cwd: tmp }), bad), discardSink()),
+    /source boom/,
+  );
+});
+
+test('merge() validates its inputs', async () => {
+  assert.throws(() => merge(), /requires at least one/);
+  assert.throws(() => merge(null, undefined), /requires at least one/);
+  assert.throws(() => merge('not-a-stream'), /expects object-mode readable streams/);
+  assert.throws(() => merge(42), /expects object-mode readable streams/);
 });

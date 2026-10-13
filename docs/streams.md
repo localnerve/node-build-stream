@@ -2,7 +2,7 @@
 
 This is the heart of node-build-stream (and of Gulp). A build is a **pipeline**: files
 flow in from disk, pass through one or more transforms, and flow out to disk.
-Three functions do all the heavy lifting:
+The core functions:
 
 ```js
 src(patterns)  ──▶  through(fn)  ──▶  dest(dir)
@@ -10,6 +10,7 @@ src(patterns)  ──▶  through(fn)  ──▶  dest(dir)
 ```
 
 You connect them with the standard Node `.pipe()` method, exactly like Gulp.
+When several file sets must flow into one pipeline, `merge()` combines them.
 
 ## `src(patterns, opts?)` — read files in
 
@@ -66,6 +67,41 @@ src('src/**/*.{html,css}').pipe(dest('dist'));
 
 After writing, node-build-stream updates `file.path` to the final on-disk location, so
 downstream transforms can see where a file landed.
+
+## `merge(...streams)` — combine several streams into one
+
+When two or more independent file sets must share a downstream pipeline (one
+common transform, one output directory), `merge()` combines them into a single
+stream — the fan-in shape Gulp builds use constantly. Pass **every** source to
+the call:
+
+```js
+import { src, through, dest, merge, pipeline } from 'node-build-stream';
+
+await pipeline(
+  merge(src('src/legacy/**/*.css'), src('src/css/**/*.css')),
+  through(minify),               // one transform for both file sets
+  dest('dist'),                  // one output tree
+);
+```
+
+> **Translating gulp's `.pipe(merge(...))` idiom.** Gulp lets you write
+> `srcA.pipe(merge(srcB)).pipe(dest)`. Node's `.pipe()` cannot express that —
+> it ends its destination as soon as the source finishes, so a mid-chain merge
+> would truncate the pipeline. The node-build-stream form is
+> `pipeline(merge(srcA, srcB), dest)`; the result is a plain readable, so you
+> can also start a classic chain from it: `merge(a, b).pipe(dest('dist'))`.
+
+Files are consumed **in the order the streams were given** — each source is
+fully drained before the next starts, and order within a source is preserved.
+Backpressure is respected end to end, so a slow downstream transform cannot
+cause unbounded buffering.
+
+`merge()` accepts any object-mode readable of File objects — `src()` results,
+other merges, or hand-built `Readable`s — and returns a new readable. An error
+on any source ends the merged stream with that error (rejecting a wrapping
+`pipeline()`), and passing anything that is not a readable (or no streams at
+all) throws a clear `TypeError` immediately, before any I/O.
 
 ## `clean(patterns, opts?)` — delete files and directories
 

@@ -102,10 +102,16 @@ export function dest(destDir, opts = {}) {
   const cwd = path.resolve(opts.cwd ?? process.cwd());
   const outDir = path.resolve(cwd, destDir);
 
+  // Async writes are tracked in a queue so that end() (and therefore the
+  // 'finish' event and stream/promises pipeline()) cannot complete while a
+  // write is still in flight — Writable only honors backpressure via the
+  // synchronous part of write().
+  let queued = Promise.resolve();
+
   return new Writable({
     objectMode: true,
-    async write(file, _enc, callback) {
-      try {
+    write(file, _enc, callback) {
+      const op = queued.then(async () => {
         const target = path.join(outDir, file.relative || path.basename(file.path));
         await fs.promises.mkdir(path.dirname(target), { recursive: true });
         if (file.isStream()) {
@@ -125,10 +131,12 @@ export function dest(destDir, opts = {}) {
         }
         // Reflect the final location back on mutable File objects.
         if ('path' in file && typeof file.path === 'string') file.path = target;
-        callback();
-      } catch (cause) {
-        callback(/** @type {Error} */ (cause));
-      }
+      }).then(() => callback(), (cause) => callback(/** @type {Error} */ (cause)));
+      queued = op.catch(() => {}); // keep the chain alive across errors
+    },
+    /** @param {(err?: Error | null) => void} cb Completes once every write has settled. */
+    final(cb) {
+      queued.then(() => cb(), (err) => cb(/** @type {Error} */ (err)));
     },
   });
 }
@@ -193,6 +201,58 @@ export function through(fn) {
       }
     },
   });
+}
+
+/**
+ * @param {any} value Candidate stream.
+ * @returns {boolean} True when the value is an async-iterable readable (e.g. src()).
+ */
+function isReadableStream(value) {
+  return !!value && typeof value === 'object' && typeof value[Symbol.asyncIterator] === 'function';
+}
+
+/**
+ * Merge multiple object-mode File streams into a single stream.
+ *
+ * Pass every source to the call — this is the fan-in shape Gulp builds use,
+ * adapted from gulp's `.pipe(merge(srcB))` idiom (which Node's `.pipe()` cannot
+ * express, since it ends its destination when the source finishes):
+ *
+ *   // Gulp:      srcA.pipe(merge(srcB)).pipe(dest('dist'))
+ *   // nbs:       pipeline(merge(srcA, srcB), dest('dist'))
+ *
+ * Backed by Readable.from(asyncGenerator), so backpressure is respected and
+ * each source is fully drained before the next one starts (sources are
+ * consumed in the order given; file order within each source is preserved).
+ * An error on any source rejects/ends the merged stream with that error.
+ *
+ * @param {...(Readable|null|undefined)} streams Object-mode readables of File
+ *   objects (e.g. src() results); `null`/`undefined` are ignored.
+ * @returns {Readable} Object-mode readable yielding every source file, in order.
+ * @throws {TypeError} When an argument is not a readable stream, or when no
+ *   streams are given.
+ */
+export function merge(...streams) {
+  const sources = streams.filter((s) => s != null);
+  for (const s of sources) {
+    if (!isReadableStream(s)) {
+      throw new TypeError(
+        `merge() expects object-mode readable streams (e.g. src() results). Got: ${describeValue(s)}.`,
+      );
+    }
+  }
+  if (!sources.length) {
+    throw new TypeError('merge() requires at least one stream.');
+  }
+
+  /** @yields {any} Every file from every source, in order. */
+  async function* merged() {
+    for (const stream of sources) {
+      for await (const file of stream) yield file;
+    }
+  }
+
+  return Readable.from(merged(), { objectMode: true });
 }
 
 /* -------------------------------------------------------------------------- */

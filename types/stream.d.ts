@@ -57,6 +57,28 @@ export declare function dest(destDir: string, opts?: {
  */
 export declare function through(fn: (file: import('./file.js').File) => any): Transform;
 /**
+ * Merge multiple object-mode File streams into a single stream.
+ *
+ * Pass every source to the call — this is the fan-in shape Gulp builds use,
+ * adapted from gulp's `.pipe(merge(srcB))` idiom (which Node's `.pipe()` cannot
+ * express, since it ends its destination when the source finishes):
+ *
+ *   // Gulp:      srcA.pipe(merge(srcB)).pipe(dest('dist'))
+ *   // nbs:       pipeline(merge(srcA, srcB), dest('dist'))
+ *
+ * Backed by Readable.from(asyncGenerator), so backpressure is respected and
+ * each source is fully drained before the next one starts (sources are
+ * consumed in the order given; file order within each source is preserved).
+ * An error on any source rejects/ends the merged stream with that error.
+ *
+ * @param {...(Readable|null|undefined)} streams Object-mode readables of File
+ *   objects (e.g. src() results); `null`/`undefined` are ignored.
+ * @returns {Readable} Object-mode readable yielding every source file, in order.
+ * @throws {TypeError} When an argument is not a readable stream, or when no
+ *   streams are given.
+ */
+export declare function merge(...streams: (Readable | null | undefined)[]): Readable;
+/**
  * Wrap raw buffer/string chunks into file-like objects ({ path, contents }) so
  * an object-mode gulp plugin can consume a plain byte stream.
  *
