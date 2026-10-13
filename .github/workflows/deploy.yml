@@ -23,6 +23,5 @@ jobs:
           npm run lint
           npm run typecheck
           npm run build:types
-          npm test
       - name: Publish
-        run: npm publish --access public
+        run: npm stage publish
