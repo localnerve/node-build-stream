@@ -47,7 +47,7 @@
     "build:example": "node ./bin/nbs.mjs --config ./examples/basic/build.mjs",
     "lint": "eslint .",
     "pretest": "node -e \"const fs=require('fs'); fs.rmSync('coverage', {recursive:true, force:true}); fs.mkdirSync('coverage')\"",
-    "test": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info",
+    "test": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info",
     "typecheck": "node scripts/typecheck.mjs",
     "build:types": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run lint && npm test && npm run build:types"

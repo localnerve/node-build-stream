@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="100%" height="100%">
+  <defs>
+    <!-- Facet Gradients matching the emerald / deep forest green polyhedron -->
+    <!-- Top facets -->
+    <linearGradient id="top-left" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#46a049"></stop>
+      <stop offset="100%" stop-color="#2d7c36"></stop>
+    </linearGradient>
+    <linearGradient id="top-right" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b8d40"></stop>
+      <stop offset="100%" stop-color="#205f2b"></stop>
+    </linearGradient>
+    <linearGradient id="top-center-left" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#43a047"></stop>
+      <stop offset="100%" stop-color="#287332"></stop>
+    </linearGradient>
+    <linearGradient id="top-center-right" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#368c3c"></stop>
+      <stop offset="100%" stop-color="#1b5e28"></stop>
+    </linearGradient>
+
+    <!-- Left side facets -->
+    <linearGradient id="left-upper" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2e7d32"></stop>
+      <stop offset="100%" stop-color="#1b5e20"></stop>
+    </linearGradient>
+    <linearGradient id="left-mid" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#1b5e20"></stop>
+      <stop offset="100%" stop-color="#0f4616"></stop>
+    </linearGradient>
+    <linearGradient id="left-lower" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#144b1b"></stop>
+      <stop offset="100%" stop-color="#092d0f"></stop>
+    </linearGradient>
+
+    <!-- Right side facets -->
+    <linearGradient id="right-upper" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e6b29"></stop>
+      <stop offset="100%" stop-color="#0f4518"></stop>
+    </linearGradient>
+    <linearGradient id="right-mid" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#11471a"></stop>
+      <stop offset="100%" stop-color="#07290d"></stop>
+    </linearGradient>
+    <linearGradient id="right-lower" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a3311"></stop>
+      <stop offset="100%" stop-color="#031606"></stop>
+    </linearGradient>
+
+    <!-- Center diamond facets -->
+    <linearGradient id="center-facet-left" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4caf50"></stop>
+      <stop offset="100%" stop-color="#1b5e20"></stop>
+    </linearGradient>
+    <linearGradient id="center-facet-right" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#388e3c"></stop>
+      <stop offset="100%" stop-color="#104218"></stop>
+    </linearGradient>
+    <linearGradient id="center-facet-bottom" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#1e6b2a"></stop>
+      <stop offset="100%" stop-color="#08290e"></stop>
+    </linearGradient>
+
+    <!-- Subtle drop shadow for text -->
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#021405" flood-opacity="0.4"></feDropShadow>
+    </filter>
+  </defs>
+
+  <!-- Hexagon Outer Shape Base -->
+  <g id="faceted-cube">
+    <!-- Top Face / Upper Triangles -->
+    <polygon points="500,120 180,305 500,500" fill="url(#top-left)"></polygon>
+    <polygon points="500,120 820,305 500,500" fill="url(#top-right)"></polygon>
+
+    <!-- Left Face Triangles -->
+    <polygon points="180,305 180,675 500,500" fill="url(#left-mid)"></polygon>
+    <polygon points="180,675 500,860 500,500" fill="url(#left-lower)"></polygon>
+
+    <!-- Right Face Triangles -->
+    <polygon points="820,305 820,675 500,500" fill="url(#right-mid)"></polygon>
+    <polygon points="820,675 500,860 500,500" fill="url(#right-lower)"></polygon>
+
+    <!-- Isometric facet subdivisions for low-poly gemstone feel -->
+    <!-- Top Sub-facets -->
+    <polygon points="500,120 340,305 500,380" fill="#4fa753" opacity="0.45"></polygon>
+    <polygon points="500,120 660,305 500,380" fill="#388e3c" opacity="0.35"></polygon>
+    <polygon points="180,305 340,305 500,500" fill="#2e7d32" opacity="0.4"></polygon>
+    <polygon points="820,305 660,305 500,500" fill="#1b5e20" opacity="0.4"></polygon>
+
+    <!-- Center Facets / Diamond Highlight -->
+    <polygon points="500,320 390,470 500,560" fill="url(#center-facet-left)" opacity="0.65"></polygon>
+    <polygon points="500,320 610,470 500,560" fill="url(#center-facet-right)" opacity="0.65"></polygon>
+    <polygon points="390,470 500,560 500,680" fill="url(#center-facet-bottom)" opacity="0.7"></polygon>
+    <polygon points="610,470 500,560 500,680" fill="#0b3812" opacity="0.6"></polygon>
+
+    <!-- Lower Side Subtle Edge Highlights -->
+    <polygon points="180,675 340,767 500,860" fill="#0d3f16" opacity="0.5"></polygon>
+    <polygon points="820,675 660,767 500,860" fill="#041a08" opacity="0.6"></polygon>
+
+    <!-- Subtle facet seam line overlays for crystalline definition -->
+    <polyline points="500,120 500,860" stroke="#66bb6a" stroke-width="2" stroke-opacity="0.25" fill="none"></polyline>
+    <polyline points="180,305 500,500 820,305" stroke="#a5d6a7" stroke-width="2" stroke-opacity="0.3" fill="none"></polyline>
+    <polyline points="180,675 500,500 820,675" stroke="#1b5e20" stroke-width="2" stroke-opacity="0.4" fill="none"></polyline>
+    <polygon points="500,120 820,305 820,675 500,860 180,675 180,305" stroke="#337839" stroke-width="4" stroke-opacity="0.5" fill="none"></polygon>
+  </g>
+
+  <!-- Typography: NBS in bold modern geometric sans-serif -->
+  <text x="500" y="585" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Montserrat', 'Inter', sans-serif" font-size="210" font-weight="900" letter-spacing="-3" fill="#FFFFFF" filter="url(#soft-shadow)">NBS</text>
+</svg>
