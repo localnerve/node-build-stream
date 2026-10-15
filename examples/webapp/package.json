@@ -18,7 +18,7 @@
     "handlebars": "^4.7.10",
     "node-build-stream": "file:../..",
     "postcss": "^8.5.30",
-    "rollup": "^4.64.6",
+    "rollup": "^4.64.7",
     "sass": "^1.105.1",
     "sitemap": "^9.0.1"
   }
