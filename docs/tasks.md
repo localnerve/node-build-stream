@@ -23,6 +23,13 @@ task('clean', async () => {
   - **stream-returning** — returns a Node.js stream such as
     `src(...).pipe(dest(...))` (see [Streams](./streams.md)). When this happens,
     the task is considered *done* only when that stream finishes writing.
+- `task()` registers the function; it does not run it immediately. Pass the
+  function itself, not the result of calling it:
+
+  ```js
+  task('build', build);       // registered; build runs when the task is invoked
+  task('build', build());     // invalid: calls build now and passes its result
+  ```
 - `description` (optional) is a **one-line purpose** for the task — pure
   metadata for humans and AI agents, with no effect on how the task runs. It
   may be a non-empty string or an object `{ description }`. It powers
@@ -107,6 +114,15 @@ Both accept, in any mix:
 Anything else raises a `TypeError`. Both return an array of results in input
 order.
 
+A schedule returned by `series()` or `parallel()` is an awaitable object, not a
+function. Await or return it; do not try to call it:
+
+```js
+const schedule = series('clean', 'build');
+await schedule;        // runs both tasks
+// schedule();         // TypeError: schedules are not callable
+```
+
 ### Composing: the usual pattern
 
 ```js
@@ -155,7 +171,7 @@ task('html',  () => src('src/*.html').pipe(dest('dist')));
 task('css',   () => src('src/*.css').pipe(dest('dist')));
 task('manifest', async () => { /* write manifest.json */ });
 
-const build = parallel('html', 'css').then(() => series('manifest'));
+const build = () => parallel('html', 'css').then(() => series('manifest'));
 
 seriesDefault('build');        // `node-build-stream`  -> html+css, then manifest
 
@@ -171,6 +187,17 @@ steps in series, and a declared default.
   `src(...).pipe(dest(...))` but does not `return` it, the task finishes
   immediately and files may not be written. Always return the stream (or make
   the function async and `await` it).
+- **Returning a function from a task.** A task body must itself be a function,
+  but the runner does not invoke a function that the body returns. Call that
+  function inside the task, or return its Promise/schedule:
+
+  ```js
+  task('build', () => build());       // invoke and return the result
+  task('build', () => build);         // returns a function; does not run it
+  ```
+- **Calling a schedule.** `series()` and `parallel()` return lazy, awaitable
+  schedules, not callable functions. Use `await series(...)` or return the
+  schedule from your task; do not write `series(...)()`.
 - **Name typos.** `getTask`/the CLI throw `Unknown task: "x". Registered: ...`
   listing what actually exists — a good safety net while you learn names.
 - **Mixing up series vs parallel for dependent steps.** A manifest written in

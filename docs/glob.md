@@ -27,6 +27,11 @@ Negation is applied *after* the positive matches: list what you want, then
 subtract what you don't. Brace sets are expanded first, so `*.{js,ts}` behaves
 exactly like passing two patterns.
 
+`src()` only resolves files inside its `cwd`. Matches outside that directory
+(including absolute patterns that point elsewhere) are excluded and therefore
+do not appear in the stream. Set `cwd` to a common parent when you need to read
+files from another directory.
+
 > **Scope note:** this covers the common cases (`*`, `**`, `?`, braces,
 > negation). It does not implement the full minimatch character-class grammar;
 > for exotic needs you can build your own file list with `Readable.from(...)`.
@@ -71,6 +76,21 @@ src('src/{css,js}/**/*');
 `dest()` rejects a file whose resolved relative output path escapes its
 destination directory (for example, a `../file.js` relative path). This catches
 unsafe paths instead of silently writing outside the requested output folder.
+
+## Fingerprinting and rewriting asset references
+
+When porting revision pipelines, verify both emitted filenames **and the
+contents of emitted bundles**. A post-fingerprinting rewrite may need to update
+references embedded inside fingerprinted JavaScript or CSS as well as links in
+HTML. For example, a webpack chunk loader can contain a literal unhashed
+`"jump-scroll.js"` reference that must be changed to the corresponding
+fingerprinted filename. Rewriting only HTML can leave dynamic imports pointing
+at files that no longer exist.
+
+Use exact asset-name boundaries when replacing manifest keys: a key such as
+`index.js` must not accidentally rewrite a longer name such as `es5-index.js`.
+Compare bundle contents against a known-good build; matching filenames alone
+does not prove a revision migration is correct.
 
 ## Using the raw helpers
 
