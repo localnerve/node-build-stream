@@ -119,6 +119,28 @@ test('CLI --list --json reports an empty registry as []', async () => {
   assert.deepEqual(JSON.parse(out), []);
 });
 
+test('CLI --tasks aliases --list and supports --json', async () => {
+  const cwd = await freshDir();
+  const source = [
+    `import { task } from '${INDEX}';`,
+    'task(\'styles\', () => {}, \'Process stylesheets\');',
+    'task(\'scripts\', () => {});',
+  ].join('\n') + '\n';
+  const out = await runCli(cwd, source, ['--tasks', '--json']);
+  assert.deepEqual(JSON.parse(out), [
+    { name: 'styles', description: 'Process stylesheets' },
+    { name: 'scripts', description: null },
+  ]);
+});
+
+test('CLI --verbose fails clearly and recommends removing the flag', async () => {
+  const cwd = await freshDir(); // no build file is needed to report this unsupported flag
+  const { code, stderr } = await (await spawnCli(['--verbose'], cwd)).done;
+  assert.notEqual(code, 0);
+  assert.match(stderr, /does not support --verbose/);
+  assert.match(stderr, /remove it/);
+});
+
 test('CLI --help and -h print usage without needing a build file', async () => {
   const cwd = await freshDir(); // deliberately empty — no build file at all
   for (const flag of ['--help', '-h']) {
@@ -126,6 +148,7 @@ test('CLI --help and -h print usage without needing a build file', async () => {
     assert.equal(code, 0);
     assert.match(stdout, /Usage:/);
     assert.match(stdout, /--list/);
+    assert.match(stdout, /--tasks/);
     assert.match(stdout, /--series/);
     assert.match(stdout, /--watch/);
     assert.match(stdout, /--glob/);

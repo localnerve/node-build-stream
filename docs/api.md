@@ -451,7 +451,7 @@ The binary is `bin/nbs.mjs` (installed as `nbs`). Not an importable API — see
 [cli.md](./cli.md) for full docs. Quick reference:
 
 ```
-nbs [task ...] [--series] [--config <file>] [--watch] [--list] [--glob <pattern>...] [--json] [--help] [unknown flags passed through]
+nbs [task ...] [--series] [--config <file>] [--watch] [--list|--tasks] [--glob <pattern>...] [--json] [--help] [unknown flags passed through]
 ```
 
 - Build file resolution: `--config`/`-c` path first, else the first existing of
@@ -468,7 +468,10 @@ nbs [task ...] [--series] [--config <file>] [--watch] [--list] [--glob <pattern>
   (use `parseArgs()` there); once an unknown flag appears, later non-dash tokens
   are NOT treated as a task name.
 - `--watch` accepts at most one task.
-- `--list`/`-l`: prints registered tasks one per line and exits, runs nothing.
+- `--list`/`--tasks`/`-l`: prints registered tasks one per line and exits,
+  runs nothing; `--json` returns the name/description inventory.
+- `--verbose`: rejected with a migration message; task/build output is already
+  shown. Other unknown options continue to pass through to the build file.
 - `--glob <pattern>`: repeatable; lists what each pattern matches via
   `globFiles()`/`deriveBase()` (matches relative to the pattern's base). Handled
   BEFORE build-file discovery — works with no build file present. No match is

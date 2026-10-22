@@ -26,20 +26,21 @@ const BUILD_FILE_CANDIDATES = ['build.mjs', 'build.js', 'gulpfile.mjs', 'gulpfil
  * Known nbs options and their values do not end task-name collection.
  *
  * @param {string[]} argv Process argument list (without node + script path).
- * @returns {{ task: string|null, tasks: string[], config: string|null, help: boolean, watch: boolean, list: boolean, series: boolean, globs: string[], json: boolean }} The parsed CLI options.
+ * @returns {{ task: string|null, tasks: string[], config: string|null, help: boolean, watch: boolean, list: boolean, series: boolean, verbose: boolean, globs: string[], json: boolean }} The parsed CLI options.
  */
 function parseArgs(argv) {
-  const args = { task: null, tasks: [], config: null, help: false, watch: false, list: false, series: false, globs: [], json: false };
+  const args = { task: null, tasks: [], config: null, help: false, watch: false, list: false, series: false, verbose: false, globs: [], json: false };
   let seenUnknownFlag = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--config' || a === '-c') args.config = argv[++i];
     else if (a === '--help' || a === '-h') args.help = true;
     else if (a === '--watch') args.watch = true;
-    else if (a === '--list' || a === '-l') args.list = true;
+    else if (a === '--list' || a === '--tasks' || a === '-l') args.list = true;
     else if (a === '--glob') args.globs.push(argv[++i]);
     else if (a === '--json') args.json = true;
     else if (a === '--series') args.series = true;
+    else if (a === '--verbose') args.verbose = true;
     else if (a.startsWith('-')) seenUnknownFlag = true;
     else if (!seenUnknownFlag) {
       args.tasks.push(a);
@@ -60,7 +61,8 @@ Options:
   --config, -c   Path to the build module (default: ./build.mjs or ./gulpfile.mjs)
   --watch        Build, then re-run on asset changes (see the build file's default export for its globs)
   --series       Run named tasks one after another (default: run concurrently)
-  --list, -l     Print the names of all registered tasks and exit (runs nothing)
+  --list, --tasks, -l
+                 Print the names of all registered tasks and exit (runs nothing)
   --glob         List the files a glob pattern would match, without building
                  (repeatable; needs no build file). Matches print relative to the
                  pattern's base directory.
@@ -68,6 +70,10 @@ Options:
                  ({ name, description } per task), one JSON object per pattern
                  for --glob
   --help, -h     Show this help
+
+Gulp migration:
+  --tasks aliases --list; --series runs named tasks serially.
+  --verbose is not supported; build and task output is already shown.
 
 The build module exports nothing special; it calls task()/series()/parallel() from
 'node-build-stream' at import time. The CLI runs multiple named tasks concurrently
@@ -171,6 +177,9 @@ async function main() {
   if (args.help) {
     printHelp();
     return;
+  }
+  if (args.verbose) {
+    throw new Error('nbs does not support --verbose; remove it (build and task output is already shown).');
   }
 
   // --glob is a pure dev tool: it runs before build-file discovery, so it

@@ -8,8 +8,8 @@ receive **your own** command-line arguments inside a task.
 ## Usage
 
 ```sh
-node /path/to/node-build-stream/bin/nbs.mjs [taskName ...] [--series] [--config <file>] [--watch] [--list]
-node /path/to/node-build-stream/bin/nbs.mjs --list --json
+node /path/to/node-build-stream/bin/nbs.mjs [taskName ...] [--series] [--config <file>] [--watch] [--list|--tasks]
+node /path/to/node-build-stream/bin/nbs.mjs --list --json # --tasks --json works too
 node /path/to/node-build-stream/bin/nbs.mjs --glob <pattern>... [--json]
 ```
 
@@ -19,7 +19,7 @@ node /path/to/node-build-stream/bin/nbs.mjs --glob <pattern>... [--json]
 | `--config`, `-c`    | Explicit path to your build module.                            |
 | `--watch`           | Build, then re-run on asset changes (see [Watching](#watching)). |
 | `--series`          | Run the named tasks serially in command-line order (default: concurrently). |
-| `--list`, `-l`      | Print the names of all registered tasks and exit — runs nothing. |
+| `--list`, `--tasks`, `-l` | Print registered task names and exit — runs nothing. |
 | `--glob <pattern>`  | List what a glob pattern matches, without building — repeatable, needs no build file (see [Glob report](#glob-report)). |
 | `--json`            | Machine-readable output: a JSON task inventory for `--list`, one JSON object per pattern for `--glob`. |
 | `--help`, `-h`      | Print usage and exit.                                          |
@@ -106,7 +106,7 @@ In the second example, both tasks run serially before the build-specific
 
 ## Listing tasks
 
-`--list` (or `-l`) imports your build file so its `task(...)` registrations run,
+`--list` (or its aliases `--tasks` and `-l`) imports your build file so its `task(...)` registrations run,
 then prints every registered task name — one per line, in registration order —
 and exits **without running anything**:
 
@@ -121,16 +121,16 @@ This is the same registry behind the exported [`listTasks()`](./tasks.md), so
 what you see here is exactly what the CLI (and your build file) can run. If no
 tasks are registered it prints `No tasks registered.` and still exits 0.
 
-### Machine-readable listing (`--list --json`)
+### Machine-readable listing (`--list --json` / `--tasks --json`)
 
-For agents or tools that drive the build, `--list --json` prints the same
+For agents or tools that drive the build, either command prints the same
 registry as a typed JSON inventory — one `{ name, description }` object per
 task, in registration order. The `description` is the one-line purpose you
 passed to [`task()`](./tasks.md); it is `null` when the task was registered
 without one:
 
 ```sh
-$ node ./bin/nbs.mjs --list --json
+$ node ./bin/nbs.mjs --tasks --json
 [
   { "name": "html", "description": "Copy HTML templates" },
   { "name": "css", "description": null }
@@ -221,6 +221,17 @@ task('manifest', async () => {
 Because the CLI passes unknown flags through untouched, this works with *any*
 build file and needs no special node-build-stream API — it is just `process.argv`
 parsing you already know from Node.
+
+## Migrating CLI flags from gulp
+
+| Gulp flag | nbs behavior |
+| --------- | ------------ |
+| `--tasks` | Supported alias for `--list`; it prints registered task names and runs nothing. |
+| `--series` | Supported; runs the named tasks serially in command-line order. Without it, multiple named tasks run concurrently. |
+| `--verbose` | Not supported. Remove it; task/build output is already shown. nbs exits with an actionable error if this flag is supplied. |
+
+Other unknown flags are still passed through to the build module. This lets
+project-specific options such as `--target staging` continue to work.
 
 ## Watching
 

@@ -17,7 +17,7 @@ project's own `vinyl` package for maximum plugin compatibility.
 - [The File object](./docs/file.md): The `File` class — `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`.
 - [Globbing](./docs/glob.md): Pattern syntax, `base` derivation rules, and the raw `globFiles()` / `deriveBase()` helpers.
 - [Gulp plugin interop](./docs/gulp-plugins.md): Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge.
-- [The CLI](./docs/cli.md): Invoking one or more tasks concurrently by default or serially with `--series` (`nbs`), build-file discovery, `--watch`, `--list --json`, and receiving your own `--flags` in a task.
+- [The CLI](./docs/cli.md): Invoking one or more tasks concurrently by default or serially with `--series` (`nbs`), build-file discovery, `--watch`, `--list`/`--tasks --json`, gulp CLI migration guidance, and receiving your own `--flags` in a task.
 
 ## Facts an agent needs up front
 
@@ -25,6 +25,7 @@ project's own `vinyl` package for maximum plugin compatibility.
 - Every API returns or composes Promises — `await series(...)`, `await pipeline(src(...), dest(...))`. Task bodies may be sync, async, or stream-returning.
 - The default export is a plain `nodeBuild` object mirroring gulp's common surface; some helpers (`getTask`, `listTasks`, `wrapFile`, `unwrapFile`, `File`, glob helpers) are named-only.
 - The `nbs` CLI accepts multiple task names and runs them concurrently in one process by default; pass `--series` to run them in command-line order. Unknown flags and following positionals are passed through to the build file.
+- `--tasks` aliases `--list`; `--verbose` is rejected with a message to remove it (task output is already shown).
 - TypeScript declarations ship under `types/` and are generated from JSDoc — never hand-edit them.
 - `base` derivation: a wildcard-free pattern like `src/css/b.css` lands FLAT in dest; only wildcarded patterns keep subfolder structure. Override with `src(patterns, { base })`.
 - Gulp's `.pipe(merge(srcB))` idiom does not work on Node (auto `end()`); use the direct-call form: `pipeline(merge(srcA, srcB), dest('dist'))`.
