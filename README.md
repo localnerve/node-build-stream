@@ -54,7 +54,7 @@ Point your project at the package, then run a build file with the bundled CLI:
 ```
 
 ```sh
-node /path/to/node-build-stream/bin/nbs.mjs [taskName] [--config ./build.mjs]
+node /path/to/node-build-stream/bin/nbs.mjs [taskName ...] [--series] [--config ./build.mjs]
 ```
 
 Or drive tasks from code — everything returns Promises:
@@ -93,7 +93,7 @@ AI agents: start from [llms.txt](./llms.txt) (a compact index of this package po
 | [The File object](./docs/file.md) | The `File` class: `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`. |
 | [Globbing](./docs/glob.md) | Pattern syntax, `base` derivation, and the raw `globFiles()` / `deriveBase()` helpers. |
 | [Gulp plugin interop](./docs/gulp-plugins.md) | Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge. |
-| [The CLI](./docs/cli.md) | Invoking builds from the terminal, build-file discovery, `--watch`, machine-readable listings (`--list --json`, `--glob --json`), and receiving your own `--flags` in a task. |
+| [The CLI](./docs/cli.md) | Invoking one or more tasks concurrently (or serially with `--series`) from the terminal, build-file discovery, `--watch`, machine-readable listings (`--list --json`, `--glob --json`), and receiving your own `--flags` in a task. |
 
 ### Export reference (quick map)
 
