@@ -35,8 +35,9 @@ exactly like passing two patterns.
 
 Every File has a `base` and a `relative` (see [The File object](./file.md)).
 `dest()` writes to `<outdir>/<relative>`, so **`base` is what preserves your
-folder structure**. node-build-stream derives `base` from the *static leading portion*
-of your pattern — the part before any wildcard appears:
+folder structure**. For each matched file, node-build-stream derives `base`
+from the *static leading portion* of the concrete pattern that matched it — the
+part before any wildcard appears:
 
 | Pattern              | Derived base            | So a matched file's `relative` is… |
 | -------------------- | ----------------------- | ---------------------------------- |
@@ -51,6 +52,25 @@ control, override it:
 ```js
 src('assets/**/*.{png,jpg}', { base: 'assets' });  // force base to assets/
 ```
+
+Each positive pattern contributes matches with its own base. If more than one
+pattern matches the same file, the first matching pattern in the pattern list
+determines its base. Brace alternatives are expanded before matching, so an
+alternative with a different static prefix gets its own base:
+
+```js
+src(['assets/**/*', 'node_modules/svgxuse/svgxuse.min.js']);
+// assets/images/logo.svg -> base assets/, relative images/logo.svg
+// node_modules/.../svgxuse.min.js -> base node_modules/svgxuse/, relative svgxuse.min.js
+
+src('src/{css,js}/**/*');
+// src/css/site.css -> base src/css/, relative site.css
+// src/js/app.js    -> base src/js/, relative app.js
+```
+
+`dest()` rejects a file whose resolved relative output path escapes its
+destination directory (for example, a `../file.js` relative path). This catches
+unsafe paths instead of silently writing outside the requested output folder.
 
 ## Using the raw helpers
 

@@ -166,7 +166,9 @@ function src(
 
 - **patterns**: glob(s), negation via leading `!`, brace sets `{a,b}`. Resolved
   against `cwd` (default `process.cwd()`).
-- **opts.base**: override the derived gulp-style base dir (else `deriveBase`).
+- Each file's base is derived from the concrete positive pattern that matched
+  it; the first matching pattern wins. Brace alternatives can have distinct
+  bases. **opts.base** overrides the derived gulp-style base for every file.
 - **opts.encoding**: if set, `file.contents` is a string of that encoding; else Buffer.
 - **opts.from**: path used to resolve the project's file class (vinyl vs shim).
 - Backed by `Readable.from(asyncGenerator)` — backpressure-safe, each file read once.
@@ -179,9 +181,10 @@ function src(
 function dest(destDir: string, opts?: { cwd?: string }): Writable; // objectMode, consumes File
 ```
 
-- Writes each file to `path.join(outDir, file.relative)` (falls back to the
-  basename), creating parent dirs. Buffer/string written directly; streamed
-  contents piped through.
+- Writes each file under `outDir` using `file.relative` (falls back to the
+  basename), creating parent dirs. Rejects paths that resolve outside the
+  destination directory. Buffer/string written directly; streamed contents
+  piped through.
 - Mutates mutable Files: sets `file.path` to the final on-disk location.
 - Async writes are serialized and awaited before `finish`: a wrapping
   `pipeline()` cannot resolve while a write is still in flight.

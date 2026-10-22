@@ -91,7 +91,7 @@ AI agents: start from [llms.txt](./llms.txt) (a compact index of this package po
 | [Tasks, series & parallel](./docs/tasks.md) | `task()` (with optional one-line descriptions), `series()`, `parallel()`, `run()`, `getTask()`, `listTasks()`, `describeTasks()`, `seriesDefault()`, `runDefault()` — defining and composing work. |
 | [Streams: src, dest & through](./docs/streams.md) | `src()`, `dest()`, `merge()`, `prefixDest()`, `clean()`, `through()` (with `FileError` file-context errors), `watch()`, and `pipeline()` — moving files in, combining streams, nesting output under subfolders, transforming them, writing them out, deleting, and re-running on change. |
 | [The File object](./docs/file.md) | The `File` class: `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`. |
-| [Globbing](./docs/glob.md) | Pattern syntax, `base` derivation, and the raw `globFiles()` / `deriveBase()` helpers. |
+| [Globbing](./docs/glob.md) | Pattern syntax, per-matching-pattern `base` derivation, safe `dest()` path handling, and the raw `globFiles()` / `deriveBase()` helpers. |
 | [Gulp plugin interop](./docs/gulp-plugins.md) | Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge. |
 | [The CLI](./docs/cli.md) | Invoking one or more tasks concurrently (or serially with `--series`) from the terminal, build-file discovery, `--watch`, machine-readable listings (`--list`/`--tasks --json`, `--glob --json`), gulp CLI migration guidance, and receiving your own `--flags` in a task. |
 

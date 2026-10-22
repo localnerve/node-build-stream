@@ -35,6 +35,32 @@ test('globFiles matches braces, recursion, and negation', async () => {
   );
 });
 
+test('globFiles normalizes supported fs.glob entry shapes and filters non-files', async () => {
+  const realGlob = fsSync.glob;
+  fsSync.glob = (_patterns, _options, callback) => callback(null, [
+    'src/a.txt',
+    'src/missing.txt',
+    'src/css',
+    { isFile: () => true, path: 'src/css/b.css' },
+    { isFile: () => true, path: path.join(tmp, 'src', 'js', 'c.js') },
+    { isFile: () => true, name: 'me.txt', parentPath: path.join(tmp, 'skip') },
+    { isFile: () => true },
+    { isFile: () => true, path: path.join(tmp, '..', 'outside.txt') },
+    { isFile: () => false, path: 'src/a.txt' },
+  ]);
+  try {
+    const files = await globFiles('**/*', { cwd: tmp });
+    assert.deepEqual(files, [
+      path.join(tmp, 'skip', 'me.txt'),
+      path.join(tmp, 'src', 'a.txt'),
+      path.join(tmp, 'src', 'css', 'b.css'),
+      path.join(tmp, 'src', 'js', 'c.js'),
+    ]);
+  } finally {
+    fsSync.glob = realGlob;
+  }
+});
+
 test('globFiles falls back to the built-in matcher when fs.glob throws', async () => {
   // The source accesses fs.glob via property lookup at call time, so patching
   // the shared fs object is enough to force the fallback path.

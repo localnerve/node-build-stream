@@ -60,6 +60,49 @@ test('src() yields one File per match with derived base', async () => {
   assert.deepEqual(names, ['a.txt', path.join('css', 'b.css')]);
 });
 
+test('src() derives each matched file base from its matching pattern', async () => {
+  const outDir = path.join(tmp, 'out-mixed-bases');
+  const files = [];
+  await pipeline(
+    src(['src/**/*', 'skip/me.txt'], { cwd: tmp }),
+    through((file) => {
+      files.push({ path: file.path, base: file.base, relative: file.relative });
+      return file;
+    }),
+    dest(outDir),
+  );
+
+  const byPath = new Map(files.map((file) => [path.relative(tmp, file.path), file]));
+  assert.equal(byPath.get(path.join('src', 'a.txt')).base, path.join(tmp, 'src'));
+  assert.equal(byPath.get(path.join('src', 'a.txt')).relative, 'a.txt');
+  assert.equal(byPath.get(path.join('skip', 'me.txt')).base, path.join(tmp, 'skip'));
+  assert.equal(byPath.get(path.join('skip', 'me.txt')).relative, 'me.txt');
+  assert.equal(await fsp.readFile(path.join(outDir, 'a.txt'), 'utf8'), 'alpha');
+  assert.equal(await fsp.readFile(path.join(outDir, 'me.txt'), 'utf8'), 'nope');
+});
+
+test('src() derives bases from each concrete brace-expanded pattern', async () => {
+  const files = [];
+  for await (const file of src('src/{css,js}/**/*', { cwd: tmp })) files.push(file);
+  const byName = new Map(files.map((file) => [path.basename(file.path), file]));
+
+  assert.equal(byName.get('b.css').base, path.join(tmp, 'src', 'css'));
+  assert.equal(byName.get('b.css').relative, 'b.css');
+  assert.equal(byName.get('c.js').base, path.join(tmp, 'src', 'js'));
+  assert.equal(byName.get('c.js').relative, 'c.js');
+});
+
+test('src() uses first matching pattern and applies negations before emitting files', async () => {
+  const files = [];
+  for await (const file of src(['src/**/*', '**/a.txt', '!**/*.css'], { cwd: tmp })) files.push(file);
+  assert.equal(files.some((file) => file.path.endsWith(path.join('src', 'css', 'b.css'))), false);
+
+  const a = files.find((file) => file.path.endsWith(path.join('src', 'a.txt')));
+  assert.ok(a);
+  assert.equal(a.base, path.join(tmp, 'src'));
+  assert.equal(a.relative, 'a.txt');
+});
+
 test('src(): encoding option and opts.base/from', async () => {
   const files = [];
   for await (const f of src('src/*.txt', { cwd: tmp, encoding: 'utf8' })) files.push(f);
@@ -69,6 +112,14 @@ test('src(): encoding option and opts.base/from', async () => {
   const f2 = [];
   for await (const f of src('src/**/*.css', { cwd: tmp, base: 'src/css' })) f2.push(f);
   assert.equal(f2[0].base, path.resolve(tmp, 'src', 'css'));
+
+  const mixed = [];
+  for await (const f of src(['src/**/*.txt', 'skip/me.txt'], { cwd: tmp, base: '.' })) mixed.push(f);
+  assert.ok(mixed.every((f) => f.base === tmp));
+  assert.deepEqual(mixed.map((f) => f.relative).sort(), [
+    path.join('skip', 'me.txt'),
+    path.join('src', 'a.txt'),
+  ]);
 });
 
 test('dest() writes files preserving relative layout', async () => {
@@ -99,6 +150,34 @@ test('dest(): streamed contents are piped; errors propagate', async () => {
   const colliding = new File({ cwd: tmp, path: path.join(tmp, 'x', 'blocker', 'inner.txt'), base: path.join(tmp, 'x') });
   colliding.contents = Buffer.from('nope');
   await assert.rejects(pipeline(Readable.from([colliding]), dest(path.join(tmp, 'out-bad'))));
+});
+
+test('dest() rejects relative and absolute file paths outside its destination', async () => {
+  const outDir = path.join(tmp, 'out-escape');
+  const outsideRelative = {
+    path: path.join(outDir, 'outside-relative.txt'),
+    relative: path.join('..', 'outside-relative.txt'),
+    contents: Buffer.from('must not be written'),
+    isStream: () => false,
+  };
+  await assert.rejects(
+    pipeline(Readable.from([outsideRelative]), dest(outDir)),
+    /refused to write outside destination directory/,
+  );
+  await assert.rejects(fsp.access(path.join(tmp, 'outside-relative.txt')));
+
+  const outsideAbsolutePath = path.join(tmp, 'outside-absolute.txt');
+  const outsideAbsolute = {
+    path: outsideAbsolutePath,
+    relative: outsideAbsolutePath,
+    contents: Buffer.from('must not be written'),
+    isStream: () => false,
+  };
+  await assert.rejects(
+    pipeline(Readable.from([outsideAbsolute]), dest(outDir)),
+    /refused to write outside destination directory/,
+  );
+  await assert.rejects(fsp.access(outsideAbsolutePath));
 });
 
 test('through() supports mutation, drop, and multi-output', async () => {
