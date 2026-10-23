@@ -19,6 +19,8 @@ export type SrcOptions = {
 };
 /**
  * Create a readable stream of File objects for the given glob pattern(s).
+ * Each file's base is derived from the first concrete positive pattern that
+ * matches it, unless `opts.base` overrides the base for every file.
  *
  * Backed by Readable.from(asyncGenerator) so backpressure is respected and each
  * file is read exactly once.
@@ -30,9 +32,10 @@ export type SrcOptions = {
 export declare function src(patterns: string | string[], opts?: SrcOptions): Readable;
 /**
  * Create a writable stream that writes File objects to disk under `destDir`.
- * Each file is written to `path.join(destDir, file.relative)`, creating parent
- * directories as needed. Buffer and string contents are supported; streamed
- * contents are piped through.
+ * Each file is written under `destDir` using `file.relative` (or its basename),
+ * creating parent directories as needed. Paths resolving outside `destDir` are
+ * rejected. Buffer and string contents are supported; streamed contents are
+ * piped through.
  *
  * @param {string} destDir Destination directory (absolute or cwd-relative).
  * @param {{ cwd?: string }} [opts]

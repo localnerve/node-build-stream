@@ -166,7 +166,9 @@ function src(
 
 - **patterns**: glob(s), negation via leading `!`, brace sets `{a,b}`. Resolved
   against `cwd` (default `process.cwd()`).
-- **opts.base**: override the derived gulp-style base dir (else `deriveBase`).
+- Each file's base is derived from the concrete positive pattern that matched
+  it; the first matching pattern wins. Brace alternatives can have distinct
+  bases. **opts.base** overrides the derived gulp-style base for every file.
 - **opts.encoding**: if set, `file.contents` is a string of that encoding; else Buffer.
 - **opts.from**: path used to resolve the project's file class (vinyl vs shim).
 - Backed by `Readable.from(asyncGenerator)` — backpressure-safe, each file read once.
@@ -179,9 +181,10 @@ function src(
 function dest(destDir: string, opts?: { cwd?: string }): Writable; // objectMode, consumes File
 ```
 
-- Writes each file to `path.join(outDir, file.relative)` (falls back to the
-  basename), creating parent dirs. Buffer/string written directly; streamed
-  contents piped through.
+- Writes each file under `outDir` using `file.relative` (falls back to the
+  basename), creating parent dirs. Rejects paths that resolve outside the
+  destination directory. Buffer/string written directly; streamed contents
+  piped through.
 - Mutates mutable Files: sets `file.path` to the final on-disk location.
 - Async writes are serialized and awaited before `finish`: a wrapping
   `pipeline()` cannot resolve while a write is still in flight.
@@ -451,18 +454,27 @@ The binary is `bin/nbs.mjs` (installed as `nbs`). Not an importable API — see
 [cli.md](./cli.md) for full docs. Quick reference:
 
 ```
-nbs [task] [--config <file>] [--watch] [--list] [--glob <pattern>...] [--json] [--help] [unknown flags passed through]
+nbs [task ...] [--series] [--config <file>] [--watch] [--list|--tasks] [--glob <pattern>...] [--json] [--help] [unknown flags passed through]
 ```
 
 - Build file resolution: `--config`/`-c` path first, else the first existing of
   `build.mjs`, `build.js`, `gulpfile.mjs`, `gulpfile.js` in the cwd.
-- Dispatch: a **function** default export is called as `defaultExport(task)`
-  (the positional task name, possibly `undefined`); otherwise a task name runs
-  via `run(task)`, and with no task name `runDefault()` runs.
+- Dispatch: named tasks run concurrently in one process by default; `--series`
+  runs them serially in command-line order. Concurrent execution waits for all
+  tasks to settle and does not cancel work on failure; serial execution stops
+  at the first failure. A **function** default export is called as
+  `defaultExport(task)` once per requested task, concurrently by default or
+  serially with `--series`, or once with `null` when no task was specified;
+  otherwise each task runs via `run(task)`/`parallel()`, and with no task name
+  `runDefault()` runs.
 - Unknown flags are passed through to the build file's `process.argv`
   (use `parseArgs()` there); once an unknown flag appears, later non-dash tokens
   are NOT treated as a task name.
-- `--list`/`-l`: prints registered tasks one per line and exits, runs nothing.
+- `--watch` accepts at most one task.
+- `--list`/`--tasks`/`-l`: prints registered tasks one per line and exits,
+  runs nothing; `--json` returns the name/description inventory.
+- `--verbose`: rejected with a migration message; task/build output is already
+  shown. Other unknown options continue to pass through to the build file.
 - `--glob <pattern>`: repeatable; lists what each pattern matches via
   `globFiles()`/`deriveBase()` (matches relative to the pattern's base). Handled
   BEFORE build-file discovery — works with no build file present. No match is

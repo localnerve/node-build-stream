@@ -42,14 +42,29 @@ patterns.
 > **Empty-match warning.** If a *positive* pattern matches no files, `src()`
 > prints a one-line warning to the console (e.g. `node-build-stream: src() matched no
 > files for pattern(s): src/**/*.html`) so a typo'd path is visible instead of
-> silently producing an empty build. A negation-only pattern list does not warn.
+> silently producing an empty build. The readable is empty and completes
+> normally; a downstream `dest()` may not create its directory because no
+> writes occur. A negation-only pattern list does not warn.
 
 ### Why "base" matters
 
 Gulp plugins compute output paths from `file.relative` (the path *inside* the
-matched folder). node-build-stream derives that base from the static part of your
-pattern: `src/**/*.css` → base is `src/`, so a file's relative path is
-`app.css`. If you need exact control, pass `{ base: 'some/dir' }`.
+matched folder). node-build-stream derives each file's base from the static
+part of the concrete pattern that matched it: `src/**/*.css` → base is `src/`,
+so a file's relative path is `app.css`. Different patterns in the same `src()`
+call can produce files with different bases. If you need exact control, pass
+`{ base: 'some/dir' }` to override all of them.
+
+### Reading from and writing back to the same directory
+
+`src()` resolves and sorts its matching paths before it starts yielding files.
+Writing new paths into that directory during the same pipeline does not add
+those paths to the already-resolved source list. File contents, however, are
+read as each file is emitted, not all eagerly at match time. Avoid overwriting
+a source path that has not yet been read: a prior destination write could
+change the bytes the later source item reads. When a transform renames or
+fingerprints files in place, ensure it does not overwrite pending inputs, or
+write to a separate destination and clean up after the source has been consumed.
 
 ## `dest(dir, opts?)` — write files out
 
@@ -216,6 +231,13 @@ for each File. What you do with the result decides what happens:
 > else, `through()` throws a clear error (`through() expected a File …`) instead of
 > failing later and more obscurely at `dest()`. Returning `null`/`undefined` to drop
 > a file is always allowed.
+
+When porting a revision pipeline, remember that asset references may be
+embedded inside JavaScript or CSS bundles (for example, dynamic-import chunk
+names), not just in HTML. A rewrite stage may need to update emitted bundle
+contents after fingerprinting. Verify output contents as well as filenames
+against a known-good build; use whole-name boundaries so a manifest key does
+not corrupt a longer filename that contains the same text.
 
 Async functions are supported, so you can `await` real work per file:
 

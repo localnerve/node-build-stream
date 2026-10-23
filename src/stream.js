@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Readable, Writable, Transform } from 'node:stream';
 import { globFiles, deriveBase } from './glob.js';
+import { expandBraces } from './glob-patterns.js';
 import { resolveFileClassSync } from './vinyl.js';
 import { toFileError } from './file-error.js';
 
@@ -41,19 +42,33 @@ function makeFile(fromPath) {
  * Async generator yielding a File per matched glob result, reading contents
  * from disk. Warns when positive patterns match nothing.
  *
- * @param {string[]} patterns Concrete (non-negated-aware) pattern list.
+ * @param {string[]} patterns Pattern list; may include brace expansion and negation.
  * @param {SrcOptions} opts Options as passed to src().
  * @param {string} cwd Resolved base directory.
  */
 async function* fileGenerator(patterns, opts, cwd) {
-  const files = await globFiles(patterns, { cwd });
+  const positivePatterns = patterns
+    .filter((pattern) => !String(pattern).startsWith('!'))
+    .flatMap((pattern) => expandBraces(String(pattern)));
+  const matchesByPattern = await Promise.all(positivePatterns.map(async (pattern) => ({
+    pattern,
+    files: await globFiles(pattern, { cwd }),
+  })));
+  const includedFiles = new Set(await globFiles(patterns, { cwd }));
+  /** @type {Map<string, string>} */
+  const filePatterns = new Map();
+  for (const { pattern, files: matchedFiles } of matchesByPattern) {
+    for (const file of matchedFiles) {
+      if (includedFiles.has(file) && !filePatterns.has(file)) filePatterns.set(file, pattern);
+    }
+  }
+  const files = [...filePatterns.keys()].sort();
   // Surface a likely typo early: a positive pattern that matches nothing would
   // otherwise produce a "successful" no-op stream that is hard to debug.
-  const hasPositivePattern = patterns.some((p) => !String(p).startsWith('!'));
+  const hasPositivePattern = positivePatterns.length > 0;
   if (!files.length && hasPositivePattern) {
     console.warn(`node-build-stream: src() matched no files for pattern(s): ${patterns.join(', ')}`);
   }
-  const base = opts.base ? path.resolve(cwd, opts.base) : deriveBase(patterns[0], cwd);
 
   for (const file of files) {
     let contents;
@@ -67,7 +82,9 @@ async function* fileGenerator(patterns, opts, cwd) {
     }
     const f = makeFile(opts.from ?? cwd);
     f.path = file;
-    f.base = base;
+    const pattern = filePatterns.get(file);
+    if (pattern === undefined) throw new Error(`node-build-stream: no source pattern found for matched file: ${file}`);
+    f.base = opts.base ? path.resolve(cwd, opts.base) : deriveBase(pattern, cwd);
     f.contents = contents;
     yield f;
   }
@@ -75,6 +92,8 @@ async function* fileGenerator(patterns, opts, cwd) {
 
 /**
  * Create a readable stream of File objects for the given glob pattern(s).
+ * Each file's base is derived from the first concrete positive pattern that
+ * matches it, unless `opts.base` overrides the base for every file.
  *
  * Backed by Readable.from(asyncGenerator) so backpressure is respected and each
  * file is read exactly once.
@@ -91,9 +110,10 @@ export function src(patterns, opts = {}) {
 
 /**
  * Create a writable stream that writes File objects to disk under `destDir`.
- * Each file is written to `path.join(destDir, file.relative)`, creating parent
- * directories as needed. Buffer and string contents are supported; streamed
- * contents are piped through.
+ * Each file is written under `destDir` using `file.relative` (or its basename),
+ * creating parent directories as needed. Paths resolving outside `destDir` are
+ * rejected. Buffer and string contents are supported; streamed contents are
+ * piped through.
  *
  * @param {string} destDir Destination directory (absolute or cwd-relative).
  * @param {{ cwd?: string }} [opts]
@@ -113,7 +133,17 @@ export function dest(destDir, opts = {}) {
     objectMode: true,
     write(file, _enc, callback) {
       const op = queued.then(async () => {
-        const target = path.join(outDir, file.relative || path.basename(file.path));
+        const relative = file.relative || path.basename(file.path);
+        const target = path.resolve(outDir, relative);
+        const relativeTarget = path.relative(outDir, target);
+        if (
+          !relativeTarget ||
+          relativeTarget === '..' ||
+          relativeTarget.startsWith(`..${path.sep}`) ||
+          path.isAbsolute(relativeTarget)
+        ) {
+          throw new Error(`node-build-stream: dest() refused to write outside destination directory: ${target}`);
+        }
         await fs.promises.mkdir(path.dirname(target), { recursive: true });
         if (file.isStream()) {
           // Pipe streamed contents to disk.

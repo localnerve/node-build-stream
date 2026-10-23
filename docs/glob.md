@@ -27,6 +27,11 @@ Negation is applied *after* the positive matches: list what you want, then
 subtract what you don't. Brace sets are expanded first, so `*.{js,ts}` behaves
 exactly like passing two patterns.
 
+`src()` only resolves files inside its `cwd`. Matches outside that directory
+(including absolute patterns that point elsewhere) are excluded and therefore
+do not appear in the stream. Set `cwd` to a common parent when you need to read
+files from another directory.
+
 > **Scope note:** this covers the common cases (`*`, `**`, `?`, braces,
 > negation). It does not implement the full minimatch character-class grammar;
 > for exotic needs you can build your own file list with `Readable.from(...)`.
@@ -35,8 +40,9 @@ exactly like passing two patterns.
 
 Every File has a `base` and a `relative` (see [The File object](./file.md)).
 `dest()` writes to `<outdir>/<relative>`, so **`base` is what preserves your
-folder structure**. node-build-stream derives `base` from the *static leading portion*
-of your pattern — the part before any wildcard appears:
+folder structure**. For each matched file, node-build-stream derives `base`
+from the *static leading portion* of the concrete pattern that matched it — the
+part before any wildcard appears:
 
 | Pattern              | Derived base            | So a matched file's `relative` is… |
 | -------------------- | ----------------------- | ---------------------------------- |
@@ -51,6 +57,40 @@ control, override it:
 ```js
 src('assets/**/*.{png,jpg}', { base: 'assets' });  // force base to assets/
 ```
+
+Each positive pattern contributes matches with its own base. If more than one
+pattern matches the same file, the first matching pattern in the pattern list
+determines its base. Brace alternatives are expanded before matching, so an
+alternative with a different static prefix gets its own base:
+
+```js
+src(['assets/**/*', 'node_modules/svgxuse/svgxuse.min.js']);
+// assets/images/logo.svg -> base assets/, relative images/logo.svg
+// node_modules/.../svgxuse.min.js -> base node_modules/svgxuse/, relative svgxuse.min.js
+
+src('src/{css,js}/**/*');
+// src/css/site.css -> base src/css/, relative site.css
+// src/js/app.js    -> base src/js/, relative app.js
+```
+
+`dest()` rejects a file whose resolved relative output path escapes its
+destination directory (for example, a `../file.js` relative path). This catches
+unsafe paths instead of silently writing outside the requested output folder.
+
+## Fingerprinting and rewriting asset references
+
+When porting revision pipelines, verify both emitted filenames **and the
+contents of emitted bundles**. A post-fingerprinting rewrite may need to update
+references embedded inside fingerprinted JavaScript or CSS as well as links in
+HTML. For example, a webpack chunk loader can contain a literal unhashed
+`"jump-scroll.js"` reference that must be changed to the corresponding
+fingerprinted filename. Rewriting only HTML can leave dynamic imports pointing
+at files that no longer exist.
+
+Use exact asset-name boundaries when replacing manifest keys: a key such as
+`index.js` must not accidentally rewrite a longer name such as `es5-index.js`.
+Compare bundle contents against a known-good build; matching filenames alone
+does not prove a revision migration is correct.
 
 ## Using the raw helpers
 

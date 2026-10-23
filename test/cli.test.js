@@ -119,6 +119,28 @@ test('CLI --list --json reports an empty registry as []', async () => {
   assert.deepEqual(JSON.parse(out), []);
 });
 
+test('CLI --tasks aliases --list and supports --json', async () => {
+  const cwd = await freshDir();
+  const source = [
+    `import { task } from '${INDEX}';`,
+    'task(\'styles\', () => {}, \'Process stylesheets\');',
+    'task(\'scripts\', () => {});',
+  ].join('\n') + '\n';
+  const out = await runCli(cwd, source, ['--tasks', '--json']);
+  assert.deepEqual(JSON.parse(out), [
+    { name: 'styles', description: 'Process stylesheets' },
+    { name: 'scripts', description: null },
+  ]);
+});
+
+test('CLI --verbose fails clearly and recommends removing the flag', async () => {
+  const cwd = await freshDir(); // no build file is needed to report this unsupported flag
+  const { code, stderr } = await (await spawnCli(['--verbose'], cwd)).done;
+  assert.notEqual(code, 0);
+  assert.match(stderr, /does not support --verbose/);
+  assert.match(stderr, /remove it/);
+});
+
 test('CLI --help and -h print usage without needing a build file', async () => {
   const cwd = await freshDir(); // deliberately empty — no build file at all
   for (const flag of ['--help', '-h']) {
@@ -126,6 +148,8 @@ test('CLI --help and -h print usage without needing a build file', async () => {
     assert.equal(code, 0);
     assert.match(stdout, /Usage:/);
     assert.match(stdout, /--list/);
+    assert.match(stdout, /--tasks/);
+    assert.match(stdout, /--series/);
     assert.match(stdout, /--watch/);
     assert.match(stdout, /--glob/);
     assert.match(stdout, /--json/);
@@ -158,6 +182,100 @@ test('CLI positional task name runs that task via run()', async () => {
   const out = await runCli(cwd, source, ['greet']);
   assert.match(out, /build complete \(build\.mjs\)/);
   await fs.access(marker); // the named task ran
+});
+
+test('CLI --series runs multiple named tasks in order in one process', async () => {
+  const cwd = await freshDir();
+  const marker = path.join(cwd, 'order.txt');
+  const source = [
+    'import { appendFileSync } from \'node:fs\';',
+    `import { task } from '${INDEX}';`,
+    `task('set-config', () => { process.env.NBS_TASK_CONFIG = 'ready'; appendFileSync(${JSON.stringify(marker)}, 'set-config\\n'); });`,
+    `task('build', () => { if (process.env.NBS_TASK_CONFIG !== 'ready') throw new Error('task environment was not shared'); appendFileSync(${JSON.stringify(marker)}, 'build\\n'); });`,
+    `task('finish', () => { appendFileSync(${JSON.stringify(marker)}, 'finish\\n'); });`,
+  ].join('\n') + '\n';
+  const out = await runCli(cwd, source, ['set-config', '--series', 'build', 'finish']);
+  assert.match(out, /build complete/);
+  assert.equal(await fs.readFile(marker, 'utf8'), 'set-config\nbuild\nfinish\n');
+});
+
+test('CLI runs multiple named tasks concurrently by default', async () => {
+  const cwd = await freshDir();
+  const marker = path.join(cwd, 'order.txt');
+  const source = [
+    'import { appendFileSync } from \'node:fs\';',
+    `import { task } from '${INDEX}';`,
+    'let started = 0;',
+    'let release;',
+    'const allStarted = new Promise((resolve) => { release = resolve; });',
+    'async function work(name) {',
+    `  appendFileSync(${JSON.stringify(marker)}, 'start:' + name + '\\n');`,
+    '  if (++started === 2) release();',
+    '  await allStarted;',
+    `  appendFileSync(${JSON.stringify(marker)}, 'end:' + name + '\\n');`,
+    '}',
+    'task(\'one\', () => work(\'one\'));',
+    'task(\'two\', () => work(\'two\'));',
+  ].join('\n') + '\n';
+  await runCli(cwd, source, ['one', 'two']);
+  const lines = (await fs.readFile(marker, 'utf8')).trim().split('\n');
+  assert.deepEqual(new Set(lines.slice(0, 2)), new Set(['start:one', 'start:two']));
+  assert.deepEqual(new Set(lines.slice(2)), new Set(['end:one', 'end:two']));
+});
+
+test('CLI stops a multi-task run when a task fails', async () => {
+  const cwd = await freshDir();
+  const marker = path.join(cwd, 'order.txt');
+  const source = [
+    'import { appendFileSync } from \'node:fs\';',
+    `import { task } from '${INDEX}';`,
+    `task('first', () => { appendFileSync(${JSON.stringify(marker)}, 'first\\n'); });`,
+    'task(\'broken\', async () => { throw new Error(\'middle task failed\'); });',
+    `task('last', () => { appendFileSync(${JSON.stringify(marker)}, 'last\\n'); });`,
+  ].join('\n') + '\n';
+  const { stderr } = await runCliExpectFail(cwd, source, ['first', '--series', 'broken', 'last']);
+  assert.match(stderr, /middle task failed/);
+  assert.equal(await fs.readFile(marker, 'utf8'), 'first\n');
+});
+
+test('CLI stops collecting task names at the first unknown flag', async () => {
+  const cwd = await freshDir();
+  const marker = path.join(cwd, 'argv.txt');
+  const source = [
+    'import { writeFileSync } from \'node:fs\';',
+    `import { task } from '${INDEX}';`,
+    `task('build', () => { writeFileSync(${JSON.stringify(marker)}, process.argv.slice(2).join(' ')); });`,
+    'task(\'not-a-task\', () => { throw new Error(\'must not run\'); });',
+  ].join('\n') + '\n';
+  await runCli(cwd, source, ['build', '--target', 'staging', 'not-a-task']);
+  assert.equal(await fs.readFile(marker, 'utf8'), 'build --target staging not-a-task');
+});
+
+test('CLI calls a function default export concurrently by default', async () => {
+  const cwd = await freshDir();
+  const marker = path.join(cwd, 'called-with.txt');
+  const source = [
+    'import { appendFileSync } from \'node:fs\';',
+    'let started = 0;',
+    'let release;',
+    'const allStarted = new Promise((resolve) => { release = resolve; });',
+    `export default async (taskName) => { appendFileSync(${JSON.stringify(marker)}, 'start:' + taskName + '\\n'); if (++started === 2) release(); await allStarted; appendFileSync(${JSON.stringify(marker)}, 'end:' + taskName + '\\n'); };`,
+  ].join('\n') + '\n';
+  await runCli(cwd, source, ['alpha', 'beta']);
+  const lines = (await fs.readFile(marker, 'utf8')).trim().split('\n');
+  assert.deepEqual(new Set(lines.slice(0, 2)), new Set(['start:alpha', 'start:beta']));
+  assert.deepEqual(new Set(lines.slice(2)), new Set(['end:alpha', 'end:beta']));
+});
+
+test('CLI --series calls a function default export in order', async () => {
+  const cwd = await freshDir();
+  const marker = path.join(cwd, 'called-with.txt');
+  const source = [
+    'import { appendFileSync } from \'node:fs\';',
+    `export default (taskName) => { appendFileSync(${JSON.stringify(marker)}, taskName + '\\n'); };`,
+  ].join('\n') + '\n';
+  await runCli(cwd, source, ['alpha', '--series', 'beta']);
+  assert.equal(await fs.readFile(marker, 'utf8'), 'alpha\nbeta\n');
 });
 
 test('CLI with no task name runs every registered task in parallel', async () => {
@@ -258,6 +376,18 @@ test('CLI --watch without globs on the default export fails clearly', async () =
   const cwd = await freshDir();
   const { stderr } = await runCliExpectFail(cwd, `import '${INDEX}';\n`, ['--watch']);
   assert.match(stderr, /must export \{ globs/);
+});
+
+test('CLI --watch rejects multiple task names', async () => {
+  const cwd = await freshDir();
+  const source = [
+    `import { task } from '${INDEX}';`,
+    'task(\'one\', () => {});',
+    'task(\'two\', () => {});',
+    'export default { globs: [\'src/**\'] };',
+  ].join('\n') + '\n';
+  const { stderr } = await runCliExpectFail(cwd, source, ['one', 'two', '--watch']);
+  assert.match(stderr, /--watch supports one task at a time/);
 });
 
 test('CLI --watch builds, re-runs on change, and stops cleanly on SIGINT', async () => {

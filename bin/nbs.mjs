@@ -20,27 +20,32 @@ const BUILD_FILE_CANDIDATES = ['build.mjs', 'build.js', 'gulpfile.mjs', 'gulpfil
 /**
  * Parse CLI arguments.
  *
- * The task name is the first non-dash token — but only while no unknown flag
- * has appeared yet: once the user's own flags start (e.g. `--minify`), any
- * following non-dash tokens belong to those flags (their values) and are left
- * alone for the build module, per the pass-through contract.
+ * Task names are non-dash tokens until the first unknown flag: after the
+ * build's own flags start (e.g. `--minify`), following tokens belong to those
+ * flags and are left alone for the build module, per the pass-through contract.
+ * Known nbs options and their values do not end task-name collection.
  *
  * @param {string[]} argv Process argument list (without node + script path).
- * @returns {{ task: string|null, config: string|null, help: boolean, watch: boolean, list: boolean, globs: string[], json: boolean }} The parsed CLI options.
+ * @returns {{ task: string|null, tasks: string[], config: string|null, help: boolean, watch: boolean, list: boolean, series: boolean, verbose: boolean, globs: string[], json: boolean }} The parsed CLI options.
  */
 function parseArgs(argv) {
-  const args = { task: null, config: null, help: false, watch: false, list: false, globs: [], json: false };
+  const args = { task: null, tasks: [], config: null, help: false, watch: false, list: false, series: false, verbose: false, globs: [], json: false };
   let seenUnknownFlag = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--config' || a === '-c') args.config = argv[++i];
     else if (a === '--help' || a === '-h') args.help = true;
     else if (a === '--watch') args.watch = true;
-    else if (a === '--list' || a === '-l') args.list = true;
+    else if (a === '--list' || a === '--tasks' || a === '-l') args.list = true;
     else if (a === '--glob') args.globs.push(argv[++i]);
     else if (a === '--json') args.json = true;
+    else if (a === '--series') args.series = true;
+    else if (a === '--verbose') args.verbose = true;
     else if (a.startsWith('-')) seenUnknownFlag = true;
-    else if (!seenUnknownFlag) args.task = a;
+    else if (!seenUnknownFlag) {
+      args.tasks.push(a);
+      args.task ??= a;
+    }
   }
   return args;
 }
@@ -49,13 +54,15 @@ function printHelp() {
   console.log(`nbs — no-dependency streaming build runner
 
 Usage:
-  nbs [taskName] [--config <file>] [--watch] [--list]
+  nbs [taskName ...] [--series] [--config <file>] [--watch] [--list]
   nbs --glob <pattern>... [--json]
 
 Options:
   --config, -c   Path to the build module (default: ./build.mjs or ./gulpfile.mjs)
   --watch        Build, then re-run on asset changes (see the build file's default export for its globs)
-  --list, -l     Print the names of all registered tasks and exit (runs nothing)
+  --series       Run named tasks one after another (default: run concurrently)
+  --list, --tasks, -l
+                 Print the names of all registered tasks and exit (runs nothing)
   --glob         List the files a glob pattern would match, without building
                  (repeatable; needs no build file). Matches print relative to the
                  pattern's base directory.
@@ -64,9 +71,15 @@ Options:
                  for --glob
   --help, -h     Show this help
 
+Gulp migration:
+  --tasks aliases --list; --series runs named tasks serially.
+  --verbose is not supported; build and task output is already shown.
+
 The build module exports nothing special; it calls task()/series()/parallel() from
-'node-build-stream' at import time. The CLI runs the named task, or the default task if
-one was registered with seriesDefault(), otherwise all tasks in parallel.
+'node-build-stream' at import time. The CLI runs multiple named tasks concurrently
+by default; --series runs them one after another in command-line order. Without task
+names, the default task runs if one was registered with seriesDefault(), otherwise
+all tasks run in parallel.
 
 With --watch, the build file's default export may be an object { globs: [...] }
 or a function; the listed patterns are watched recursively and the selected
@@ -165,6 +178,9 @@ async function main() {
     printHelp();
     return;
   }
+  if (args.verbose) {
+    throw new Error('nbs does not support --verbose; remove it (build and task output is already shown).');
+  }
 
   // --glob is a pure dev tool: it runs before build-file discovery, so it
   // works in any directory — even one with no build file at all.
@@ -195,6 +211,10 @@ async function main() {
     return;
   }
 
+  if (args.watch && args.tasks.length > 1) {
+    throw new Error('--watch supports one task at a time; select a single task.');
+  }
+
   if (args.watch) {
     await watchMode(args, mod);
     return;
@@ -202,10 +222,24 @@ async function main() {
 
   // The build file may export a function to invoke, or rely on registered tasks.
   if (typeof mod.default === 'function') {
-    await mod.default(args.task);
-  } else if (args.task) {
-    const { run } = await import(new URL('../src/index.js', import.meta.url).href);
-    await run(args.task);
+    if (args.tasks.length > 0) {
+      if (args.series) {
+        for (const taskName of args.tasks) await mod.default(taskName);
+      } else {
+        const { parallel } = await import(new URL('../src/index.js', import.meta.url).href);
+        await parallel(...args.tasks.map((taskName) => () => mod.default(taskName)));
+      }
+    } else {
+      await mod.default(args.task);
+    }
+  } else if (args.tasks.length > 0) {
+    if (args.series) {
+      const { run } = await import(new URL('../src/index.js', import.meta.url).href);
+      for (const taskName of args.tasks) await run(taskName);
+    } else {
+      const { parallel } = await import(new URL('../src/index.js', import.meta.url).href);
+      await parallel(...args.tasks);
+    }
   } else {
     const { runDefault } = await import(new URL('../src/index.js', import.meta.url).href);
     await runDefault();

@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { expandBraces } from './glob-patterns.js';
 
 const hasFsGlob = typeof fs.glob === 'function';
 
@@ -63,25 +64,6 @@ export function deriveBase(pattern, cwd) {
   const parts = segments.slice(0, Math.max(staticDepth, 0));
   // Preserve the leading slash for absolute patterns.
   return isAbs ? path.join('/', ...parts) : path.resolve(cwd ?? process.cwd(), ...parts);
-}
-
-/**
- * Expand `{a,b}` brace sets into concrete patterns (no other fancy syntax).
- *
- * @param {string} pattern A glob pattern that may contain one level of braces per segment.
- * @returns {string[]} The expanded patterns; `[pattern]` when no braces are present.
- */
-function expandBraces(pattern) {
-  const m = pattern.match(/^(.*)\{([^{}]+)\}(.*)$/);
-  if (!m) return [pattern];
-  const [, pre, group, post] = m;
-  const out = [];
-  for (const opt of group.split(',')) {
-    for (const suffix of expandBraces(post)) {
-      out.push(pre + opt + suffix);
-    }
-  }
-  return out.length ? out : [pattern];
 }
 
 /**

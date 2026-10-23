@@ -76,6 +76,24 @@ console.log(f.relative);   // 'readme.md'
 Relative `path`/`base` inputs are resolved against `cwd` (defaulting to the
 current working directory), so you can write portable code.
 
+For a one-off generated file, `base` is optional. When `path` is provided and
+`base` is omitted, it defaults to the file's parent directory, so
+`file.relative` is the basename and `dest()` writes it flat into its output
+directory:
+
+```js
+import { File, dest } from 'node-build-stream';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+const manifest = new File({ path: 'dist/manifest.json' });
+manifest.contents = JSON.stringify({ files: [] }, null, 2);
+await pipeline(Readable.from([manifest]), dest('dist'));
+```
+
+This is useful for writing a generated manifest without starting a `src()`
+pipeline.
+
 ### Cloning for fan-out
 
 `clone()` is how one input becomes many outputs in a `through()` transform:

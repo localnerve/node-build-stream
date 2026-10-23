@@ -8,17 +8,18 @@ receive **your own** command-line arguments inside a task.
 ## Usage
 
 ```sh
-node /path/to/node-build-stream/bin/nbs.mjs [taskName] [--config <file>] [--watch] [--list]
-node /path/to/node-build-stream/bin/nbs.mjs --list --json
+node /path/to/node-build-stream/bin/nbs.mjs [taskName ...] [--series] [--config <file>] [--watch] [--list|--tasks]
+node /path/to/node-build-stream/bin/nbs.mjs --list --json # --tasks --json works too
 node /path/to/node-build-stream/bin/nbs.mjs --glob <pattern>... [--json]
 ```
 
 | Argument            | Meaning                                                        |
 | ------------------- | -------------------------------------------------------------- |
-| `taskName`          | Run this one registered task (positional, optional).           |
+| `taskName ...`      | Run one or more tasks in the same process (optional). Concurrent by default. |
 | `--config`, `-c`    | Explicit path to your build module.                            |
 | `--watch`           | Build, then re-run on asset changes (see [Watching](#watching)). |
-| `--list`, `-l`      | Print the names of all registered tasks and exit — runs nothing. |
+| `--series`          | Run the named tasks serially in command-line order (default: concurrently). |
+| `--list`, `--tasks`, `-l` | Print registered task names and exit — runs nothing. |
 | `--glob <pattern>`  | List what a glob pattern matches, without building — repeatable, needs no build file (see [Glob report](#glob-report)). |
 | `--json`            | Machine-readable output: a JSON task inventory for `--list`, one JSON object per pattern for `--glob`. |
 | `--help`, `-h`      | Print usage and exit.                                          |
@@ -43,8 +44,11 @@ nice migration on-ramp (see [Gulp plugin interop](./gulp-plugins.md)).
 The CLI imports your build file so its `task(...)` registrations run, then:
 
 1. If your file **exports a default function**, that function is called with the
-   requested task name — giving you full control over composition. This is the
-   most flexible pattern (used by [`../examples/basic/build.mjs`](../examples/basic/build.mjs)):
+   requested task name — once for each requested name when multiple task names
+   are supplied. Multiple calls run concurrently by default, or one at a time
+   in command-line order with `--series`. With no name it is called once with
+   `null`. This gives you full control over composition and is the most flexible
+   pattern (used by [`../examples/basic/build.mjs`](../examples/basic/build.mjs)):
 
    ```js
    // build.mjs
@@ -57,7 +61,11 @@ The CLI imports your build file so its `task(...)` registrations run, then:
      taskName ? series(taskName) : parallel('html', 'css');
    ```
 
-2. Otherwise, if you passed a **task name**, it runs just that task.
+2. Otherwise, each supplied **task name** is run concurrently by default, or
+   serially in command-line order with `--series`. Tasks share one process. In
+   concurrent mode, all tasks start and the CLI waits for them to settle; a
+   failure exits non-zero but does not cancel tasks already started. In serial
+   mode, a task failure prevents later tasks from running.
 3. Otherwise it runs the **default**: your `seriesDefault(...)` task if set, else
    every registered task in parallel (see [Tasks](./tasks.md)).
 
@@ -72,9 +80,33 @@ parseable line plus the original stack:
 
 See [Streams → File context on errors](./streams.md#file-context-on-errors-fileerror).
 
+### Multiple tasks in one invocation
+
+Pass task names positionally to run them concurrently in one CLI process by
+default. Add `--series` to run them one at a time, in command-line order:
+
+```sh
+nbs styles scripts manifest
+nbs --series set-config build
+```
+
+The nbs options (such as `--config`, `--watch`, and `--series`) can appear
+before, between, or after task names. The first **unknown** flag starts the
+build's pass-through arguments:
+positionals after it are not additional task names, and remain available in
+`process.argv` to the build module:
+
+```sh
+nbs build --dir ./out
+nbs --series set-config build --target staging
+```
+
+In the second example, both tasks run serially before the build-specific
+`--target` arguments. `--watch` supports one task at a time.
+
 ## Listing tasks
 
-`--list` (or `-l`) imports your build file so its `task(...)` registrations run,
+`--list` (or its aliases `--tasks` and `-l`) imports your build file so its `task(...)` registrations run,
 then prints every registered task name — one per line, in registration order —
 and exits **without running anything**:
 
@@ -89,16 +121,16 @@ This is the same registry behind the exported [`listTasks()`](./tasks.md), so
 what you see here is exactly what the CLI (and your build file) can run. If no
 tasks are registered it prints `No tasks registered.` and still exits 0.
 
-### Machine-readable listing (`--list --json`)
+### Machine-readable listing (`--list --json` / `--tasks --json`)
 
-For agents or tools that drive the build, `--list --json` prints the same
+For agents or tools that drive the build, either command prints the same
 registry as a typed JSON inventory — one `{ name, description }` object per
 task, in registration order. The `description` is the one-line purpose you
 passed to [`task()`](./tasks.md); it is `null` when the task was registered
 without one:
 
 ```sh
-$ node ./bin/nbs.mjs --list --json
+$ node ./bin/nbs.mjs --tasks --json
 [
   { "name": "html", "description": "Copy HTML templates" },
   { "name": "css", "description": null }
@@ -141,11 +173,12 @@ style.css
 
 ## Receiving your own CLI arguments
 
-The CLI only understands its *own* flags (`--config`, `--watch`, `--list`,
-`--help`) and the task name. **Any other flag is left alone** — it never
-consumes unknown `--options`. That means your build file can read arbitrary
-arguments straight from `process.argv`, which is how you add feature-specific
-switches to a task:
+The CLI understands its *own* flags (`--config`, `--watch`, `--list`,
+`--help`, and `--series`) and the task names. **Any other flag is left alone**
+— it never consumes unknown `--options`. Once the first unknown flag appears,
+later positional tokens are not treated as task names. That means your build
+file can read arbitrary arguments straight from `process.argv`, which is how
+you add feature-specific switches to a task:
 
 ```sh
 nbs manifest --minify --target staging
@@ -188,6 +221,17 @@ task('manifest', async () => {
 Because the CLI passes unknown flags through untouched, this works with *any*
 build file and needs no special node-build-stream API — it is just `process.argv`
 parsing you already know from Node.
+
+## Migrating CLI flags from gulp
+
+| Gulp flag | nbs behavior |
+| --------- | ------------ |
+| `--tasks` | Supported alias for `--list`; it prints registered task names and runs nothing. |
+| `--series` | Supported; runs the named tasks serially in command-line order. Without it, multiple named tasks run concurrently. |
+| `--verbose` | Not supported. Remove it; task/build output is already shown. nbs exits with an actionable error if this flag is supplied. |
+
+Other unknown flags are still passed through to the build module. This lets
+project-specific options such as `--target staging` continue to work.
 
 ## Watching
 

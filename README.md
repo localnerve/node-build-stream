@@ -54,7 +54,7 @@ Point your project at the package, then run a build file with the bundled CLI:
 ```
 
 ```sh
-node /path/to/node-build-stream/bin/nbs.mjs [taskName] [--config ./build.mjs]
+node /path/to/node-build-stream/bin/nbs.mjs [taskName ...] [--series] [--config ./build.mjs]
 ```
 
 Or drive tasks from code — everything returns Promises:
@@ -91,9 +91,10 @@ AI agents: start from [llms.txt](./llms.txt) (a compact index of this package po
 | [Tasks, series & parallel](./docs/tasks.md) | `task()` (with optional one-line descriptions), `series()`, `parallel()`, `run()`, `getTask()`, `listTasks()`, `describeTasks()`, `seriesDefault()`, `runDefault()` — defining and composing work. |
 | [Streams: src, dest & through](./docs/streams.md) | `src()`, `dest()`, `merge()`, `prefixDest()`, `clean()`, `through()` (with `FileError` file-context errors), `watch()`, and `pipeline()` — moving files in, combining streams, nesting output under subfolders, transforming them, writing them out, deleting, and re-running on change. |
 | [The File object](./docs/file.md) | The `File` class: `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`. |
-| [Globbing](./docs/glob.md) | Pattern syntax, `base` derivation, and the raw `globFiles()` / `deriveBase()` helpers. |
+| [Globbing](./docs/glob.md) | Pattern syntax, per-matching-pattern `base` derivation, safe `dest()` path handling, and the raw `globFiles()` / `deriveBase()` helpers. |
 | [Gulp plugin interop](./docs/gulp-plugins.md) | Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge. |
-| [The CLI](./docs/cli.md) | Invoking builds from the terminal, build-file discovery, `--watch`, machine-readable listings (`--list --json`, `--glob --json`), and receiving your own `--flags` in a task. |
+| [The CLI](./docs/cli.md) | Invoking one or more tasks concurrently (or serially with `--series`) from the terminal, build-file discovery, `--watch`, machine-readable listings (`--list`/`--tasks --json`, `--glob --json`), gulp CLI migration guidance, and receiving your own `--flags` in a task. |
+| [1.0.0 release notes](./docs/releases/1.0.0.md) | Project overview and release highlights for CLI, globbing, destination safety, and migration guidance. |
 
 ### Export reference (quick map)
 
