@@ -1,6 +1,6 @@
 {
   "name": "node-build-stream",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A no-dependency, Node 24+ streaming build runner that replaces gulp while staying compatible with existing gulp plugins and Vinyl file objects.",
   "type": "module",
   "license": "MIT",
@@ -100,7 +100,7 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "minimatch": "^11.0.4"
+    "minimatch": "^11.0.8"
   },
   "repository": {
     "type": "git",

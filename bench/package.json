@@ -1,6 +1,6 @@
 {
   "name": "node-build-stream-bench",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Performance benchmark for node-build-stream vs gulp, using the examples/webapp pipeline as the workload. Results accumulate in results/history.jsonl for over-time tracking.",
@@ -20,8 +20,8 @@
     "gulp": "^5.0.1",
     "handlebars": "^4.7.10",
     "postcss": "^8.5.32",
-    "rollup": "^4.67.4",
-    "sass": "^1.107.1",
+    "rollup": "^4.68.3",
+    "sass": "^1.108.2",
     "sitemap": "^10.0.0"
   },
   "devDependencies": {

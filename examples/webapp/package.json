@@ -1,6 +1,6 @@
 {
   "name": "node-build-stream-webapp-example",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Full webapp pipeline example for node-build-stream: rollup bundle + env inject (async), sass-to-postcss streaming via through(), robots/llms.txt/security.txt/sitemap/hbs asset generation (async), and fingerprint + ref-rewrite + manifest-merge as pure through() transforms.",
   "type": "module",
@@ -14,12 +14,12 @@
     "dev": "nbs --watch"
   },
   "dependencies": {
-    "autoprefixer": "^10.6.1",
+    "autoprefixer": "^10.6.2",
     "handlebars": "^4.7.10",
     "node-build-stream": "file:../..",
-    "postcss": "^8.5.30",
-    "rollup": "^4.64.7",
-    "sass": "^1.105.1",
-    "sitemap": "^9.0.1"
+    "postcss": "^8.5.32",
+    "rollup": "^4.68.3",
+    "sass": "^1.108.2",
+    "sitemap": "^10.0.0"
   }
 }
