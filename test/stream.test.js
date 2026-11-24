@@ -14,7 +14,7 @@ import fsSync from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, Readable, Writable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { finished, pipeline } from 'node:stream/promises';
 import { src, dest, through, merge, prefixDest, wrapFile, unwrapFile, File } from '../src/index.js';
 import { setupFixture, cleanupFixture } from './helpers/fixture.js';
 
@@ -128,6 +128,109 @@ test('dest() writes files preserving relative layout', async () => {
   assert.equal(await fsp.readFile(path.join(outDir, 'a.txt'), 'utf8'), 'alpha');
   assert.equal(await fsp.readFile(path.join(outDir, path.join('css', 'b.css')), 'utf8'), 'body{}');
   assert.equal(await fsp.readFile(path.join(outDir, path.join('js', 'c.js')), 'utf8'), 'console.log(1)');
+});
+
+test('dest() passes written files through to a second destination when opted in', async () => {
+  const firstDir = path.join(tmp, 'out-passthrough-first');
+  const secondDir = path.join(tmp, 'out-passthrough-second');
+  const files = Array.from({ length: 40 }, (_, i) => {
+    const file = new File({
+      cwd: tmp, base: path.join(tmp, 'src'), path: path.join(tmp, 'src', 'nested', `${i}.txt`),
+      contents: Buffer.from(`content ${i}`),
+    });
+    file.revOrigPath = `original-${i}`;
+    return file;
+  });
+  const seen = [];
+  await pipeline(
+    Readable.from(files),
+    dest(firstDir, { passthrough: true }),
+    through(async (file) => {
+      assert.equal(file, files[seen.length]);
+      assert.equal(file.base, firstDir);
+      assert.equal(file.relative, path.join('nested', `${seen.length}.txt`));
+      assert.equal(await fsp.readFile(file.path, 'utf8'), `content ${seen.length}`);
+      seen.push(file.revOrigPath);
+      return file;
+    }),
+    dest(secondDir),
+    { signal: AbortSignal.timeout(5000) },
+  );
+  assert.equal(seen.length, files.length);
+  assert.equal(seen[39], 'original-39');
+  assert.equal(await fsp.readFile(path.join(secondDir, 'nested', '39.txt'), 'utf8'), 'content 39');
+});
+
+test('dest() pass-through works in a Gulp-style pipe chain', async () => {
+  const firstDir = path.join(tmp, 'out-passthrough-pipe-first');
+  const secondDir = path.join(tmp, 'out-passthrough-pipe-second');
+  const output = src('src/a.txt', { cwd: tmp })
+    .pipe(dest(firstDir, { passthrough: true }))
+    .pipe(through((file) => {
+      file.contents = Buffer.from('processed');
+      return file;
+    }))
+    .pipe(dest(secondDir));
+  await finished(output);
+  assert.equal(await fsp.readFile(path.join(firstDir, 'a.txt'), 'utf8'), 'alpha');
+  assert.equal(await fsp.readFile(path.join(secondDir, 'a.txt'), 'utf8'), 'processed');
+});
+
+test('dest() pass-through restores streamed contents for downstream consumers', async () => {
+  const firstDir = path.join(tmp, 'out-passthrough-stream-first');
+  const secondDir = path.join(tmp, 'out-passthrough-stream-second');
+  const file = new File({
+    cwd: tmp, path: path.join(tmp, 'input.bin'), contents: Readable.from([Buffer.from('stream data')]),
+  });
+  await pipeline(Readable.from([file]), dest(firstDir, { passthrough: true }), dest(secondDir));
+  assert.equal(await fsp.readFile(path.join(firstDir, 'input.bin'), 'utf8'), 'stream data');
+  assert.equal(await fsp.readFile(path.join(secondDir, 'input.bin'), 'utf8'), 'stream data');
+});
+
+test('dest() pass-through does not open replay streams that downstream ignores', async () => {
+  const createReadStream = fsSync.createReadStream;
+  let opened = 0;
+  fsSync.createReadStream = (...args) => {
+    opened++;
+    return createReadStream(...args);
+  };
+  try {
+    const file = new File({
+      cwd: tmp, path: path.join(tmp, 'ignored.bin'), contents: Readable.from([Buffer.from('data')]),
+    });
+    await pipeline(
+      Readable.from([file]),
+      dest(path.join(tmp, 'out-passthrough-ignored'), { passthrough: true }),
+      discardSink(),
+    );
+    assert.equal(opened, 0);
+  } finally {
+    fsSync.createReadStream = createReadStream;
+  }
+});
+
+test('dest() pass-through propagates write and input stream errors without emitting the file', async () => {
+  let emitted = false;
+  const invalid = new File({ cwd: tmp, path: path.join(tmp, 'blocked', 'file.txt'), contents: Buffer.from('x') });
+  const blocked = path.join(tmp, 'out-passthrough-blocked');
+  await fsp.writeFile(blocked, 'not a directory');
+  await assert.rejects(pipeline(
+    Readable.from([invalid]),
+    dest(blocked, { passthrough: true }),
+    through((file) => { emitted = true; return file; }),
+    discardSink(),
+  ));
+  assert.equal(emitted, false);
+
+  const broken = new File({
+    cwd: tmp, path: path.join(tmp, 'broken.txt'),
+    contents: new Readable({ read() { this.destroy(new Error('input stream failed')); } }),
+  });
+  await assert.rejects(pipeline(
+    Readable.from([broken]),
+    dest(path.join(tmp, 'out-passthrough-broken'), { passthrough: true }),
+    discardSink(),
+  ), /input stream failed/);
 });
 
 test('dest(): streamed contents are piped; errors propagate', async () => {

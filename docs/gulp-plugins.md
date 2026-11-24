@@ -42,6 +42,12 @@ task('css',    () => src('src/**/*.css').pipe(cssmin()).pipe(dest('dist')));
 No adapters, no wrappers. `.pipe()` is plain Node; the plugin sees File objects
 and pushes them on.
 
+Unlike Gulp's `dest()`, node-build-stream's default `dest()` is terminal.
+For a destination in the middle of a chain, use
+`dest('dist', { passthrough: true })` and consume its output with the next
+plugin or destination. Keep the final destination in its default terminal mode.
+See [Streams: dest](./streams.md#destdir-opts--write-files-out).
+
 ## The Vinyl auto-detection detail
 
 Gulp plugins receive **Vinyl** file objects (from the `vinyl` package). Some
@@ -98,8 +104,8 @@ Vinyl onto code that does not want it.
    `import { src, dest } from 'node-build-stream'`.
 2. `gulp.series(...)` / `gulp.parallel(...)` → `series(...)` / `parallel(...)`.
 3. `gulp.task(name, fn)` → `task(name, fn)`.
-4. Keep every plugin line exactly as it was — they are just `.pipe()`d
-   transforms.
+4. Keep plugin lines as `.pipe()`d transforms. Add `{ passthrough: true }` to
+   each `dest()` that has a downstream stage.
 5. Point the CLI at your build file (see [CLI](./cli.md)); node-build-stream even
    auto-detects an existing `gulpfile.mjs` so migration can be one command.
 

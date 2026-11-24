@@ -30,19 +30,13 @@ export type SrcOptions = {
  * @returns {Readable} Object-mode readable of File objects.
  */
 export declare function src(patterns: string | string[], opts?: SrcOptions): Readable;
-/**
- * Create a writable stream that writes File objects to disk under `destDir`.
- * Each file is written under `destDir` using `file.relative` (or its basename),
- * creating parent directories as needed. Paths resolving outside `destDir` are
- * rejected. Buffer and string contents are supported; streamed contents are
- * piped through.
- *
- * @param {string} destDir Destination directory (absolute or cwd-relative).
- * @param {{ cwd?: string }} [opts]
- * @returns {Writable} Object-mode writable of File objects.
- */
+export declare function dest(destDir: string, opts: {
+    cwd?: string;
+    passthrough: true;
+}): Transform;
 export declare function dest(destDir: string, opts?: {
     cwd?: string;
+    passthrough?: boolean;
 }): Writable;
 /**
  * Create an object-mode Transform from a user function, for native build steps.
