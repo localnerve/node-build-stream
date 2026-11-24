@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable, Writable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { globFiles, deriveBase } from './glob.js';
 import { expandBraces } from './glob-patterns.js';
 import { resolveFileClassSync } from './vinyl.js';
@@ -109,15 +110,27 @@ export function src(patterns, opts = {}) {
 }
 
 /**
- * Create a writable stream that writes File objects to disk under `destDir`.
+ * Create a stream that writes File objects to disk under `destDir`.
  * Each file is written under `destDir` using `file.relative` (or its basename),
  * creating parent directories as needed. Paths resolving outside `destDir` are
  * rejected. Buffer and string contents are supported; streamed contents are
- * piped through.
+ * piped through. With `passthrough: true`, written files are emitted downstream.
  *
+ * @overload
  * @param {string} destDir Destination directory (absolute or cwd-relative).
- * @param {{ cwd?: string }} [opts]
+ * @param {{ cwd?: string, passthrough: true }} opts
+ * @returns {Transform} Object-mode transform of File objects.
+ */
+/**
+ * @overload
+ * @param {string} destDir Destination directory (absolute or cwd-relative).
+ * @param {{ cwd?: string, passthrough?: boolean }} [opts]
  * @returns {Writable} Object-mode writable of File objects.
+ */
+/**
+ * @param {string} destDir Destination directory (absolute or cwd-relative).
+ * @param {{ cwd?: string, passthrough?: boolean }} [opts]
+ * @returns {Writable|Transform} Object-mode writable or pass-through transform.
  */
 export function dest(destDir, opts = {}) {
   const cwd = path.resolve(opts.cwd ?? process.cwd());
@@ -129,46 +142,61 @@ export function dest(destDir, opts = {}) {
   // synchronous part of write().
   let queued = Promise.resolve();
 
+  /**
+   * @param {import('./file.js').File & { path: string }} file
+   * @param {(err?: Error | null) => void} callback
+   */
+  function writeFile(file, callback) {
+    const op = queued.then(async () => {
+      const relative = file.relative || path.basename(file.path);
+      const target = path.resolve(outDir, relative);
+      const relativeTarget = path.relative(outDir, target);
+      if (
+        !relativeTarget ||
+        relativeTarget === '..' ||
+        relativeTarget.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativeTarget)
+      ) {
+        throw new Error(`node-build-stream: dest() refused to write outside destination directory: ${target}`);
+      }
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      if (file.isStream()) {
+        await pipeline(/** @type {Readable} */ (file.contents), fs.createWriteStream(target));
+        if (opts.passthrough) {
+          file.contents = Readable.from((async function* () {
+            yield* fs.createReadStream(target);
+          })(), { objectMode: false });
+        }
+      } else {
+        await fs.promises.writeFile(target, file.contents ?? Buffer.alloc(0));
+      }
+      // Reflect the final location back on mutable File objects.
+      if ('path' in file && typeof file.path === 'string') file.path = target;
+      if (opts.passthrough && 'base' in file) file.base = outDir;
+    }).then(() => callback(), (cause) => callback(/** @type {Error} */ (cause)));
+    queued = op.catch(() => {}); // keep the chain alive across errors
+  }
+
+  /** @param {(err?: Error | null) => void} cb Completes once every write has settled. */
+  function final(cb) {
+    queued.then(() => cb(), (err) => cb(/** @type {Error} */ (err)));
+  }
+
+  if (opts.passthrough) {
+    return new Transform({
+      objectMode: true,
+      transform(file, _enc, callback) {
+        writeFile(file, (err) => callback(err, err ? undefined : file));
+      },
+      final,
+    });
+  }
   return new Writable({
     objectMode: true,
     write(file, _enc, callback) {
-      const op = queued.then(async () => {
-        const relative = file.relative || path.basename(file.path);
-        const target = path.resolve(outDir, relative);
-        const relativeTarget = path.relative(outDir, target);
-        if (
-          !relativeTarget ||
-          relativeTarget === '..' ||
-          relativeTarget.startsWith(`..${path.sep}`) ||
-          path.isAbsolute(relativeTarget)
-        ) {
-          throw new Error(`node-build-stream: dest() refused to write outside destination directory: ${target}`);
-        }
-        await fs.promises.mkdir(path.dirname(target), { recursive: true });
-        if (file.isStream()) {
-          // Pipe streamed contents to disk.
-          const ws = fs.createWriteStream(target);
-          try {
-            await new Promise((resolve, reject) => {
-              ws.on('error', reject);
-              ws.on('finish', () => resolve(true));
-              file.contents.pipe(ws);
-            });
-          } finally {
-            ws.close();
-          }
-        } else {
-          await fs.promises.writeFile(target, file.contents ?? Buffer.alloc(0));
-        }
-        // Reflect the final location back on mutable File objects.
-        if ('path' in file && typeof file.path === 'string') file.path = target;
-      }).then(() => callback(), (cause) => callback(/** @type {Error} */ (cause)));
-      queued = op.catch(() => {}); // keep the chain alive across errors
+      writeFile(file, callback);
     },
-    /** @param {(err?: Error | null) => void} cb Completes once every write has settled. */
-    final(cb) {
-      queued.then(() => cb(), (err) => cb(/** @type {Error} */ (err)));
-    },
+    final,
   });
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "node-build-stream",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "A no-dependency, Node 24+ streaming build runner that replaces gulp while staying compatible with existing gulp plugins and Vinyl file objects.",
   "type": "module",
   "license": "MIT",
@@ -94,13 +94,13 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "eslint-plugin-n": "^18.5.0",
     "globals": "^17.14.0",
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "minimatch": "^11.0.8"
+    "minimatch": "^11.0.9"
   },
   "repository": {
     "type": "git",

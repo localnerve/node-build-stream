@@ -178,7 +178,8 @@ function src(
 ### `dest(destDir, opts?)`
 
 ```ts
-function dest(destDir: string, opts?: { cwd?: string }): Writable; // objectMode, consumes File
+function dest(destDir: string, opts: { cwd?: string; passthrough: true }): Transform;
+function dest(destDir: string, opts?: { cwd?: string; passthrough?: boolean }): Writable;
 ```
 
 - Writes each file under `outDir` using `file.relative` (falls back to the
@@ -186,6 +187,10 @@ function dest(destDir: string, opts?: { cwd?: string }): Writable; // objectMode
   destination directory. Buffer/string written directly; streamed contents
   piped through.
 - Mutates mutable Files: sets `file.path` to the final on-disk location.
+- `passthrough: true` returns a transform that emits each successfully written
+  File, sets `file.base` to the output directory, and replaces streamed contents
+  with a fresh read stream of the output. Consume its readable side; use the
+  default terminal writable for the final destination.
 - Async writes are serialized and awaited before `finish`: a wrapping
   `pipeline()` cannot resolve while a write is still in flight.
 

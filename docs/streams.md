@@ -68,7 +68,7 @@ write to a separate destination and clean up after the source has been consumed.
 
 ## `dest(dir, opts?)` — write files out
 
-`dest()` returns a **writable stream**. For each File it writes to
+By default, `dest()` returns a terminal **writable stream**. For each File it writes to
 `path.join(dir, file.relative)`, creating parent directories as needed. It
 handles Buffer contents, string contents, and even files whose contents are
 themselves streams (it pipes them through).
@@ -80,8 +80,31 @@ src('src/**/*.{html,css}').pipe(dest('dist'));
 // dist/ now mirrors the folder layout under your matched base.
 ```
 
-After writing, node-build-stream updates `file.path` to the final on-disk location, so
-downstream transforms can see where a file landed.
+After writing, node-build-stream updates `file.path` to the final on-disk location.
+
+To keep processing files after writing them, use `{ passthrough: true }` on the
+intermediate destination. It returns a transform that emits each file only after
+its write succeeds, with `file.path` set to the destination path and `file.base`
+set to the destination directory. Streamed contents are replaced with a fresh
+read stream of the written file, so downstream stages can read them again.
+
+```js
+import { src, dest, pipeline } from 'node-build-stream';
+import rev from 'gulp-rev';
+
+await pipeline(
+  src('assets/**/*'),
+  rev(),
+  dest('dist', { passthrough: true }),
+  rev.manifest(),
+  dest('dist'),
+);
+```
+
+The pass-through stream's readable side must be consumed; do not use it as an
+undrained terminal destination, which can stall when its buffer fills. Use the
+default `dest('dist')` at the end of the chain. For streamed contents, avoid
+writing back to the same path while a downstream stage is reading that file.
 
 ## `merge(...streams)` — combine several streams into one
 

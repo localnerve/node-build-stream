@@ -38,6 +38,8 @@ plugins, node-build-stream re-implements just three small pieces using Node buil
 
 Everything is piped with `node:stream/promises`.`pipeline`, which handles
 backpressure, error propagation, and cleanup across the whole chain.
+An intermediate destination can pass written files downstream with
+`dest('dist', { passthrough: true })`; the default destination remains terminal.
 
 ## Requirements
 
@@ -89,7 +91,7 @@ AI agents: start from [llms.txt](./llms.txt) (a compact index of this package po
 | [API reference](./docs/api.md) | The complete export surface in one dense file: entry points, signatures, params, returns. |
 | [Getting started](./docs/getting-started.md) | The mental model, install, and a first build (CLI + code). |
 | [Tasks, series & parallel](./docs/tasks.md) | `task()` (with optional one-line descriptions), `series()`, `parallel()`, `run()`, `getTask()`, `listTasks()`, `describeTasks()`, `seriesDefault()`, `runDefault()` — defining and composing work. |
-| [Streams: src, dest & through](./docs/streams.md) | `src()`, `dest()`, `merge()`, `prefixDest()`, `clean()`, `through()` (with `FileError` file-context errors), `watch()`, and `pipeline()` — moving files in, combining streams, nesting output under subfolders, transforming them, writing them out, deleting, and re-running on change. |
+| [Streams: src, dest & through](./docs/streams.md) | `src()`, `dest()` (including opt-in pass-through), `merge()`, `prefixDest()`, `clean()`, `through()` (with `FileError` file-context errors), `watch()`, and `pipeline()` — moving files in, combining streams, nesting output under subfolders, transforming them, writing them out, deleting, and re-running on change. |
 | [The File object](./docs/file.md) | The `File` class: `path`/`base`/`relative`/`contents`, type checks, `clone()`, `toJSON()`. |
 | [Globbing](./docs/glob.md) | Pattern syntax, per-matching-pattern `base` derivation, safe `dest()` path handling, and the raw `globFiles()` / `deriveBase()` helpers. |
 | [Gulp plugin interop](./docs/gulp-plugins.md) | Reusing existing Gulp plugins, Vinyl auto-detection, and the `wrapFile()`/`unwrapFile()` byte-stream bridge. |
